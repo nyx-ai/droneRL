@@ -9,7 +9,7 @@ DroneRL Workshop
 
 * Q-learning and DQN [slides](https://docs.google.com/presentation/d/1aWn3qE9_sJFMJeTyB6H4sPTQaB3R-2zz7DnWOXLiO9I/edit?usp=sharing) / [notebook](https://colab.research.google.com/drive/1ubKreDv8Cdd5UtB7BL-prnZWqd6dSKFs)
 
-* DQN Tips & Ticks [notebook](https://colab.research.google.com/drive/1OBlDdEiiZVRJ91P9DwR6PVGHDE21LoNn)
+* DQN Tips & Ticks [slides](https://docs.google.com/presentation/d/17X395cv2NLup6h5ZwNnjbqCAF_cgEgcfpafxR3ZDyYg/edit?usp=sharing) / [notebook](https://colab.research.google.com/drive/1OBlDdEiiZVRJ91P9DwR6PVGHDE21LoNn)
 
 **Troubleshooting**
 
