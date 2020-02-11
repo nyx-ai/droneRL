@@ -5,9 +5,9 @@ DroneRL Workshop
 
 * What is reinforcement learning? [slides](https://docs.google.com/presentation/d/1juMEUcWgdg3IHfk33HvWxjVuwnNh4U-KurhBFtGTl6k/edit?usp=sharing) 
 
-* The `DroneDeliveries environment [slides](https://docs.google.com/presentation/d/1k1wuReVWI04bYMPAQKyrPiajEZ2eVH9n4KdMIcy_Ntg/edit?usp=sharing) / [notebook](https://colab.research.google.com/drive/1gtZ1zZD1O1aT6v577Y3z9HfiXFo5u1zD)
+* The `DeliveryDrones` environment [slides](https://docs.google.com/presentation/d/1k1wuReVWI04bYMPAQKyrPiajEZ2eVH9n4KdMIcy_Ntg/edit?usp=sharing) / [notebook](https://colab.research.google.com/drive/1gtZ1zZD1O1aT6v577Y3z9HfiXFo5u1zD)
 
-* Q-learning and DQN [slides](https://docs.google.com/presentation/d/1aWn3qE9_sJFMJeTyB6H4sPTQaB3R-2zz7DnWOXLiO9I/edit?usp=sharing) / notebook
+* Q-learning and DQN [slides](https://docs.google.com/presentation/d/1aWn3qE9_sJFMJeTyB6H4sPTQaB3R-2zz7DnWOXLiO9I/edit?usp=sharing) / [notebook](https://colab.research.google.com/drive/1ubKreDv8Cdd5UtB7BL-prnZWqd6dSKFs)
 
 * RL Tips & Ticks
 
