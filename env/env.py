@@ -483,5 +483,5 @@ class DeliveryDrones(Env):
 
         return '\n'.join(lines)
 
-    def format_action(i):
+    def format_action(self, i):
         return ['←', '↓', '→', '↑', 'X'][i]
