@@ -20,6 +20,14 @@ conda env create -f environment.yml
 jupyter labextension install @jupyter-widgets/jupyterlab-manager
 ```
 
+**Credits**
+
+Authors: @pacm, @MasterScrat, @metataro 
+
+Contributors: @spMohanty
+
+Part of this work was supported by the [EPFL Extension School](http://exts.epfl.ch/) and [AIcrowd](http://aicrowd.com/).
+
 **Licence**
 
 * [16ShipCollection](https://opengameart.org/content/1616-ship-collection) by master484 under Public Domain / CC0
