@@ -9,7 +9,7 @@ from PIL import Image
 import aicrowd_helpers
 from env.env import DeliveryDrones
 from env.wrappers import WindowedGridView
-from rl_helpers.rl_helpers import set_seed
+from helpers.rl_helpers import set_seed
 
 
 class DroneRacerEvaluator:
@@ -29,15 +29,11 @@ class DroneRacerEvaluator:
         self.EPISODE_SEEDS = [845, 99, 65, 96, 85, 39, 51, 17, 52, 35]
         self.TOTAL_EPISODE_STEPS = 1000
         self.participating_agents = {
-            "baseline-1": "baseline_models/random-agent-4.pt",
-            "baseline-2": "baseline_models/random-agent-1.pt",
-            "baseline-3": "baseline_models/random-agent-2.pt",
-            "baseline-4": "baseline_models/random-agent-3.pt",
-            "baseline-5": "baseline_models/random-agent-3.pt",
-            "baseline-6": "baseline_models/random-agent-3.pt",
-            "baseline-7": "baseline_models/random-agent-3.pt",
-            "baseline-8": "baseline_models/random-agent-3.pt",
-            "baseline-9": "baseline_models/random-agent-3.pt",
+            "baseline-1": "baseline_models/dqn-agent.pt",
+            "baseline-2": "baseline_models/dqn-agent.pt",
+            "baseline-3": "baseline_models/dqn-agent.pt",
+            "baseline-4": "baseline_models/dqn-agent.pt",
+            "baseline-5": "baseline_models/dqn-agent.pt",
         }
 
         self.video_directory_path = tempfile.mkdtemp()
@@ -96,7 +92,6 @@ class DroneRacerEvaluator:
         ################################################
         # Load submission model
         ################################################
-        # submission_path = "baseline_models/random-agent-0.pt" # To be received directly
 
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device('cpu')
         model = torch.load(submission_file_path, map_location=device)
@@ -232,7 +227,7 @@ if __name__ == "__main__":
     # and a sample submission is present at data/sample_submission.csv
     answer_file_path = "."
     _client_payload = {}
-    _client_payload["submission_file_path"] = "baseline_models/random-agent-3.pt"
+    _client_payload["submission_file_path"] = "baseline_models/dqn-agent.pt"
     _client_payload["aicrowd_submission_id"] = 1123
     _client_payload["aicrowd_participant_id"] = 1234
 

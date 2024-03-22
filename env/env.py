@@ -54,7 +54,7 @@ class Drone():
 class Grid:
     def __init__(self, shape):
         self.shape = shape
-        self.grid = np.full(shape, fill_value=None, dtype=np.object)
+        self.grid = np.full(shape, fill_value=None, dtype=object)
 
     def __getitem__(self, key):
         return self.grid[key]
@@ -151,7 +151,8 @@ class DeliveryDrones(Env):
             top_corner = (42, 28)
 
             i = top_corner[0] + row * (tiles_size + small_padding)
-            j = top_corner[1] + (col % 5) * (tiles_size + small_padding) + (col // 5) * (5 * (tiles_size + small_padding) + big_padding)
+            j = top_corner[1] + (col % 5) * (tiles_size + small_padding) + (col // 5) * (
+                        5 * (tiles_size + small_padding) + big_padding)
             return Image.fromarray(sprites_img_array[i:i + tiles_size, j:j + tiles_size])
 
         self.tiles = {
@@ -346,7 +347,8 @@ class DeliveryDrones(Env):
         self.packets = [Packet() for _ in range(self.env_params['packets_factor'] * self.env_params['n_drones'])]
         self.dropzones = [Dropzone() for _ in range(self.env_params['dropzones_factor'] * self.env_params['n_drones'])]
         self.stations = [Station() for _ in range(self.env_params['stations_factor'] * self.env_params['n_drones'])]
-        self.skyscrapers = [Skyscraper() for _ in range(self.env_params['skyscrapers_factor'] * self.env_params['n_drones'])]
+        self.skyscrapers = [Skyscraper() for _ in
+                            range(self.env_params['skyscrapers_factor'] * self.env_params['n_drones'])]
         self.drones = [Drone(index) for index in range(self.env_params['n_drones'])]
 
         # Spawn objects

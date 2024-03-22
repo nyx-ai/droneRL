@@ -97,7 +97,8 @@ class CompassChargeQTable(CompassQTable):
         ])
 
     def format_state(self, s):
-        return 'target: {}, station: {}, charge: {}'.format(self.cardinals[s['target_dir']], self.cardinals[s['station_dir']], s['charge_level'])
+        return 'target: {}, station: {}, charge: {}'.format(self.cardinals[s['target_dir']],
+                                                            self.cardinals[s['station_dir']], s['charge_level'])
 
 
 class LidarCompassQTable(CompassQTable):
@@ -226,7 +227,7 @@ class WindowedGridView(ObservationWrapper):
         assert radius > 0, "radius should be strictly positive"
 
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(self.radius * 2 + 1, self.radius * 2 + 1, 6), dtype=np.float)
+            low=0, high=1, shape=(self.radius * 2 + 1, self.radius * 2 + 1, 6), dtype=float)
 
     def observation(self, _):
         # Create grid
