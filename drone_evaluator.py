@@ -1,15 +1,15 @@
 import os.path
-import tempfile
 
 import numpy as np
 import torch
 import tqdm
-from PIL import Image
 
-import aicrowd_helpers
 from env.env import DeliveryDrones
 from env.wrappers import WindowedGridView
 from helpers.rl_helpers import set_seed
+from PIL import Image
+import tempfile
+import aicrowd_helpers
 
 
 class DroneRacerEvaluator:
@@ -111,10 +111,10 @@ class DroneRacerEvaluator:
             # Env Instantiation
             ################################################
             env_params = {  # Updates to the default params have to be added after this instantiation
-                'charge': 20,
                 'charge_reward': -0.1,
                 'crash_reward': -1,
                 'delivery_reward': 1,
+                'charge': 20,
                 'discharge': 10,
                 'drone_density': 0.05,
                 'dropzones_factor': 2,
