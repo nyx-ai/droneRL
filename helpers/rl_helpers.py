@@ -188,7 +188,7 @@ def render_video(env, agents, video_path, n_steps=60, fps=1, seed=None):
         actions = {key: agent.act(states[key]) for key, agent in agents.items()}
 
         # Perform the selected action
-        next_states, rewards, dones, _ = env.step(actions)
+        next_states, rewards, dones, _, _ = env.step(actions)
         states = next_states
 
         # Save frame
