@@ -12,6 +12,14 @@ from torch import Tensor, LongTensor
 
 from .logging import Logger, NoLogger
 
+# Determine and store the best available device globally
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else
+    "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else
+    "cpu")
+device = "cpu"
+print(device)
+
 
 class DenseQNetwork(nn.Module):
     """
@@ -20,9 +28,9 @@ class DenseQNetwork(nn.Module):
     """
 
     def __init__(self, env, hidden_layers=[]):
-        # Action space and observation spaces should by OpenAI gym spaces
-        isinstance(env.observation_space, spaces.Space), 'Observation space should be an OpenAI Gym space'
-        isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
+        # Action space and observation spaces should be OpenAI gym spaces
+        assert isinstance(env.observation_space, spaces.Space), 'Observation space should be an OpenAI Gym space'
+        assert isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
 
         # Create network
         super().__init__()  # Initialize module
@@ -46,18 +54,12 @@ class DenseQNetwork(nn.Module):
             self.network.add_module('dense_{}'.format(i + 1), layer)
 
         # Move network to GPU if available
-        if torch.cuda.is_available():
-            self.network.cuda()
+        self.network.to(device)
 
     def forward(self, states):
-        # Forward flattened state
-        states_flattened = [spaces.flatten(self.env.observation_space, s) for s in states]
-        states_tensor = Tensor(states_flattened)
-
-        # Move tensor to GPU if available
-        if torch.cuda.is_available():
-            states_tensor = states_tensor.cuda()
-
+        # Efficient flattening of states and tensor conversion
+        states_flattened = np.array([spaces.flatten(self.env.observation_space, s) for s in states])
+        states_tensor = torch.Tensor(states_flattened).to(device)
         return self.network(states_tensor)
 
 
@@ -66,7 +68,8 @@ class ConvQNetwork(nn.Module):
     A convolutional Q-network with conv + dense architecture
     """
 
-    def __init__(self, env, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], dense_layers=[]):
+    def __init__(self, env, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}],
+                 dense_layers=[]):
         # Action space and observation spaces should by OpenAI gym spaces
         isinstance(env.observation_space, spaces.Box), 'Observation space should be a OpenAI Gym "Box" 3d space'
         isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
@@ -113,19 +116,14 @@ class ConvQNetwork(nn.Module):
             self.network.add_module('dense_{}'.format(dense_i + 1), layer)
 
         # Move network to GPU if available
-        if torch.cuda.is_available():
-            self.network.cuda()
+        self.network.to(device)
 
     def forward(self, states):
-        # Forward flattened state
-        batch_states = np.array(states).transpose(0, 3, 1, 2)
-        batch_tensor = Tensor(batch_states)
-
-        # Move tensor to GPU if available
-        if torch.cuda.is_available():
-            batch_tensor = batch_tensor.cuda()
-
-        return self.network(batch_tensor)
+        # Convert states to tensor and rearrange dimensions
+        # states input shape is [batch_size, height, width, channels]
+        # we need [batch_size, channels, height, width] for PyTorch convolutions
+        states_tensor = torch.tensor(np.array(states), dtype=torch.float32, device=device).permute(0, 3, 1, 2)
+        return self.network(states_tensor)
 
 
 class DQNFactoryTemplate():
@@ -150,6 +148,7 @@ class DenseQNetworkFactory(DQNFactoryTemplate):
     def create_qnetwork(self, target_qnetwork):
         network = DenseQNetwork(self.env, self.hidden_layers)
         optimizer = optim.Adam(network.parameters())
+        print(network)
         return network, optimizer
 
 
@@ -166,6 +165,7 @@ class ConvQNetworkFactory(DQNFactoryTemplate):
     def create_qnetwork(self, target_qnetwork):
         network = ConvQNetwork(self.env, self.conv_layers, self.dense_layers)
         optimizer = optim.Adam(network.parameters())
+        print(network)
         return network, optimizer
 
 
@@ -215,17 +215,16 @@ class DQNAgent():
 
         # Create new replay memory
         self.memory = deque(maxlen=self.memory_size)
-        
+
     def save(self, path):
         torch.save(self.qnetwork, path)
-        
+
     def load(self, path):
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device('cpu')
         self.qnetwork = torch.load(path, map_location=device)
 
     def act(self, state):
         # Exploration rate
-        epsilon = 0.01 if self.is_greedy else self.epsilon
+        epsilon = 0.0 if self.is_greedy else self.epsilon
 
         if np.random.rand() < epsilon:
             return self.env.action_space.sample()
@@ -248,28 +247,26 @@ class DQNAgent():
             })
             self.epsilons.append(self.epsilon)  # Log epsilon value
 
-            # Epislone decay
+            # Epsilon decay
             self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_end)
+
             self.episode_reward = 0
 
         # Periodically update target network with current one
-        if self.num_episode % self.target_update_interval == 0:
+        if self.total_steps % self.target_update_interval == 0:
             self.target_qnetwork.load_state_dict(self.qnetwork.state_dict())
 
         # Train when we have enough experiences in the replay memory
         if len(self.memory) > self.batch_size:
             # Sample batch of experience
-            batch = random.sample(self.memory, self.batch_size)
+            # batch = random.sample(self.memory, self.batch_size)
+            batch_indices = np.random.choice(len(self.memory), self.batch_size, replace=False)
+            batch = [self.memory[idx] for idx in batch_indices]
             state, action, reward, next_state, done = zip(*batch)
 
-            action = LongTensor(action)
-            reward = Tensor(reward)
-            done = Tensor(done)
-
-            if torch.cuda.is_available():
-                action = action.cuda()
-                reward = reward.cuda()
-                done = done.cuda()
+            action = LongTensor(action).to(device)
+            reward = Tensor(reward).to(device)
+            done = Tensor(done).to(device)
 
             # Q-value for current state given current action
             q_values = self.qnetwork(state)
@@ -288,9 +285,12 @@ class DQNAgent():
             self.optimizer.step()
 
             self.logger.log_dict(self.total_steps, {
-                'dqn/loss': loss.data.cpu().numpy(),
-                'dqn/reward': reward.mean().data.cpu().numpy(),
+                'dqn/loss': loss.item(),
+                'dqn/reward': reward.mean().item(),
             })
+        else:
+            # print(f"Not learning yet! {len(self.memory)}/{self.batch_size} experiences")
+            pass
 
     def inspect_memory(self, top_n=10, max_col=80):
         # Functions to encode/decode states
