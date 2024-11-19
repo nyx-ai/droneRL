@@ -9,18 +9,21 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch import Tensor, LongTensor
+import os
 
 from .logging import Logger, NoLogger
 
 # Determine and store the best available device globally
-if torch.cuda.is_available():
-    device = 'cuda'
-elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-    # For now not using mps device
-    print('device "mps" is available, but falling back to "cpu"')
-    device = 'cpu'
-else:
-    device = 'cpu'
+device = os.getenv('DEVICE')
+if device is None:
+    if torch.cuda.is_available():
+        device = 'cuda'
+    elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        # For now not using mps device
+        print('device "mps" is available, but falling back to "cpu"')
+        device = 'cpu'
+    else:
+        device = 'cpu'
 print(device)
 
 
