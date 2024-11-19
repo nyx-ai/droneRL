@@ -175,7 +175,7 @@ def render_video(env, agents, video_path, n_steps=60, fps=1, seed=None):
     # Initialization
     if seed is not None:
         set_seed(env, seed=seed)
-    states = env.reset()
+    states, info = env.reset()
 
     # Set greedy flag
     for key, agent in agents.items():

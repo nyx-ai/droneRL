@@ -13,11 +13,14 @@ from torch import Tensor, LongTensor
 from .logging import Logger, NoLogger
 
 # Determine and store the best available device globally
-device = torch.device(
-    "cuda" if torch.cuda.is_available() else
-    "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else
-    "cpu")
-device = "cpu"
+if torch.cuda.is_available():
+    device = 'cuda'
+elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+    # For now not using mps device
+    print('device "mps" is available, but falling back to "cpu"')
+    device = 'cpu'
+else:
+    device = 'cpu'
 print(device)
 
 

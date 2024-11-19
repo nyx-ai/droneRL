@@ -135,7 +135,7 @@ class DroneRacerEvaluator:
             env.env_params["player_name_mappings"] = agent_name_mappings
 
             # Gather First Obeservation (state)
-            state = env.reset()
+            state, _ = env.reset()
 
             # Episode step loop
             for _step in tqdm.tqdm(range(self.TOTAL_EPISODE_STEPS)):
@@ -176,7 +176,7 @@ class DroneRacerEvaluator:
                             _step_frame_im.save("{}/{}.jpg".format(self.video_directory_path, str(_step).zfill(4)))
 
                 # Perform action (on all agents)
-                state, rewards, done, info = env.step(_action_dictionary)
+                state, rewards, done, done, info = env.step(_action_dictionary)
 
                 # Gather rewards for all agents (inside episode_score)
                 _step_score = np.array(list(rewards.values()))  # Check with florian about ordering

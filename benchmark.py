@@ -75,7 +75,7 @@ training_env.env_params.update({
     'skyscrapers_factor': 3,
     'stations_factor': 2
 })
-states = training_env.reset()
+states, info = training_env.reset()
 print(training_env.render(mode='ansi'))
 agents = {drone.index: RandomAgent(training_env) for drone in training_env.drones}
 agents[0] = DQNAgent(
