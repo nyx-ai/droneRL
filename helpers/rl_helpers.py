@@ -11,7 +11,7 @@ from base64 import b64encode
 
 def set_seed(env, seed):
     """Helper function to set the seeds when needed"""
-    env.seed(seed)  # Environment seed
+    env.reset(seed=seed)  # Environment seed
     env.action_space.seed(seed)  # Seed for env.action_space.sample()
     np.random.seed(seed)  # Numpy seed
     torch.manual_seed(seed)  # PyTorch seed
@@ -43,7 +43,7 @@ class MultiAgentTrainer:
 
     def train(self, n_steps):
         # Reset env. and get initial observations
-        states = self.env.reset()
+        states, info = self.env.reset()
 
         # Set greedy flag
         for key, agent in self.agents.items():
@@ -54,7 +54,7 @@ class MultiAgentTrainer:
             actions = {key: agent.act(states[key]) for key, agent in self.agents.items()}
 
             # Perform the selected action
-            next_states, rewards, dones, _ = self.env.step(actions)
+            next_states, rewards, dones, _, _ = self.env.step(actions)
 
             # Learn from experience
             for key, agent in self.agents.items():
@@ -69,7 +69,7 @@ def test_agents(env, agents, n_steps, seed=None):
     # Initialization
     if seed is not None:
         set_seed(env, seed=seed)
-    states = env.reset()
+    states, info = env.reset()
     rewards_log = defaultdict(list)
 
     # Set greedy flag
@@ -82,7 +82,7 @@ def test_agents(env, agents, n_steps, seed=None):
             actions = {key: agent.act(states[key]) for key, agent in agents.items()}
 
         # Perform the selected action
-        next_states, rewards, dones, _ = env.step(actions)
+        next_states, rewards, dones, _, _ = env.step(actions)
 
         # Save rewards
         for key, reward in rewards.items():

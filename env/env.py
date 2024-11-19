@@ -349,7 +349,7 @@ class DeliveryDrones(Env):
 
         # Return new states, rewards, done and other infos
         info = {'air_respawns': air_respawns, 'ground_respawns': ground_respawns}
-        return self._get_grids(), rewards, dones, info
+        return self._get_grids(), rewards, dones, dones, info
 
     def reset(self, seed=0):
         # Define size of the environment
