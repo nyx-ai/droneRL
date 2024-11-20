@@ -12,8 +12,8 @@ from helpers.rl_helpers import test_agents
 wandb.login()
 
 SWEEP_NAME = "dronerl-dense-1"
-NUM_TRAINING_STEPS = 15_000
-NUM_TESTING_STEPS = 50_000
+NUM_TRAINING_STEPS = 25_000
+NUM_TESTING_STEPS = 25_000
 
 
 def evaluate(config):
@@ -57,7 +57,7 @@ def evaluate(config):
         epsilon_start=1.0,
         epsilon_decay=config.epsilon_decay,
         epsilon_end=0.01,
-        memory_size=config.memory_size,
+        memory_size=10_000_000,
         batch_size=config.batch_size,
         target_update_interval=config.target_update_interval
     )
@@ -80,18 +80,18 @@ sweep_configuration = {
     "parameters": {
         "size_layers": {
             "min": 1,
-            "max": 512,
+            "max": 256,
         },
         "num_layers": {
             "min": 1,
-            "max": 8,
+            "max": 4,
         },
         "gamma": {
-            "min": 0.8,
+            "min": 0.9,
             "max": 1.0,
         },
         "epsilon_decay": {
-            "min": 0.8,
+            "min": 0.9,
             "max": 1.0,
         },
         "target_update_interval": {
@@ -99,10 +99,6 @@ sweep_configuration = {
             "max": 100,
         },
         "batch_size": {
-            "min": 1,
-            "max": 1000,
-        },
-        "memory_size": {
             "min": 1,
             "max": 1000,
         },
@@ -114,4 +110,4 @@ sweep_configuration = {
 }
 
 sweep_id = wandb.sweep(sweep=sweep_configuration, project=SWEEP_NAME)
-wandb.agent(sweep_id, function=main, count=10)
+wandb.agent(sweep_id, function=main, count=10_000_000)
