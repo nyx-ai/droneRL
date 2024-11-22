@@ -12,8 +12,8 @@ from helpers.rl_helpers import test_agents
 wandb.login()
 
 SWEEP_NAME = "dronerl-dense-1"
-NUM_TRAINING_STEPS = 25_000
-NUM_TESTING_STEPS = 25_000
+NUM_TRAINING_STEPS = 10_000  # 25_000
+NUM_TESTING_STEPS = 10_000
 
 
 def evaluate(config):
@@ -74,38 +74,57 @@ def main():
     wandb.log({"score": score})
 
 
+# https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
 sweep_configuration = {
-    "method": "random",
-    "metric": {"goal": "maximize", "name": "score"},
+    "method": "bayes",
+    "metric": {
+        "name": "score",
+        "goal": "maximize",
+    },
     "parameters": {
         "size_layers": {
+            "distribution": "q_log_uniform_values",
             "min": 1,
             "max": 256,
         },
         "num_layers": {
+            "distribution": "int_uniform",
             "min": 1,
             "max": 4,
         },
         "gamma": {
+            "distribution": "q_log_uniform_values",
+            "q": 0.001,
             "min": 0.9,
             "max": 1.0,
         },
         "epsilon_decay": {
+            "distribution": "q_log_uniform_values",
+            "q": 0.001,
             "min": 0.9,
             "max": 1.0,
         },
         "target_update_interval": {
+            "distribution": "q_log_uniform_values",
             "min": 1,
-            "max": 100,
+            "max": 256,
         },
         "batch_size": {
+            "distribution": "q_log_uniform_values",
             "min": 1,
-            "max": 1000,
+            "max": 256,
         },
         "n_drones": {
-            "min": 1,
-            "max": 10,
-        }
+            "distribution": "int_uniform",
+            "min": 2,
+            "max": 5,
+        },
+        # TODO implement support
+        # "lr": {
+        #     "distribution": "log_uniform_values",
+        #     "min": 0.0001,
+        #     "max": 0.01
+        # }
     },
 }
 
