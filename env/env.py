@@ -1,7 +1,6 @@
 import itertools
 import os
 from collections import defaultdict
-from enum import Enum
 
 import gym.spaces as spaces
 import numpy as np
@@ -12,63 +11,21 @@ assets_path = os.path.dirname(os.path.realpath(__file__))
 font_path = os.path.join(assets_path, "assets", "font", "Inconsolata-Bold.ttf")
 sprite_path = os.path.join(assets_path, "assets", "16ShipCollection.png")
 
+NUM_ACTIONS = 5
+ACTION_LEFT = 0
+ACTION_DOWN = 1
+ACTION_RIGHT = 2
+ACTION_UP = 3
+ACTION_STAY = 4
 
-class Action(Enum):
-    LEFT = 0
-    DOWN = 1
-    RIGHT = 2
-    UP = 3
-    STAY = 4
-
-
-class GridElement:
-    @staticmethod
-    def get_id():
-        # Should return unique grid element id
-        raise NotImplementedError
+OBJ_DRONE = 0
+OBJ_SKYSCRAPER = 1
+OBJ_STATION = 2
+OBJ_DROPZONE = 3
+OBJ_PACKET = 4
 
 
-class Skyscraper(GridElement):
-    @staticmethod
-    def get_id():
-        return 0
-
-    def __repr__(self):
-        return '#'
-
-
-class Station(GridElement):
-    @staticmethod
-    def get_id():
-        return 1
-
-    def __repr__(self):
-        return '@'
-
-
-class Dropzone(GridElement):
-    @staticmethod
-    def get_id():
-        return 2
-
-    def __repr__(self):
-        return 'Z'
-
-
-class Packet(GridElement):
-    @staticmethod
-    def get_id():
-        return 3
-
-    def __repr__(self):
-        return 'P'
-
-
-class Drone(GridElement):
-    @staticmethod
-    def get_id():
-        return 4
-
+class Drone():
     def __init__(self, index):
         self.index = index
         self.packet = None
@@ -91,8 +48,7 @@ class Grid:
 
     def get_objects(self, object_type, positions=None, zip_results=False):
         """Filter objects matching criteria"""
-        # objects_mask = np.vectorize(lambda tile: isinstance(tile, object_type))(self.grid)
-        objects_mask = np.vectorize(lambda tile: tile is not None and tile.get_id() == object_type)(self.grid)
+        objects_mask = np.vectorize(lambda tile: tile == object_type)(self.grid)
 
         if positions is not None:
             position_mask = np.full(shape=self.shape, fill_value=False)
@@ -150,7 +106,11 @@ class DeliveryDrones(Env):
         self.env_params.update(env_params)
 
         # Define spaces
-        self.action_space = spaces.Discrete(len(Action))
+        self.action_space = spaces.Discrete(NUM_ACTIONS)
+
+        # Drone data
+        self.drone_data = {}
+        self.drones = []
 
     def __init_rgb_rendering(self):
         # Load RGBA image
@@ -235,10 +195,7 @@ class DeliveryDrones(Env):
 
             player_name = 'Player {:>2}'.format(drone.index)
             if "player_name_mappings" in self.env_params.keys():
-                """
-                    Optional Setting for rendering videos on evaluator
-                    -- Non-breaking change
-                """
+                # Optional setting for rendering videos on AIcrowd evaluator
                 player_name = self.env_params["player_name_mappings"][drone.index]
 
             # # Print text
@@ -256,19 +213,21 @@ class DeliveryDrones(Env):
         air_respawns = []
         ground_respawns = []
 
-        for drone, position in self.air.get_objects(Drone.get_id(), zip_results=True):
-            # Drone actually teleports temporarily remove it from the air
+        for _, position in self.air.get_objects(OBJ_DRONE, zip_results=True):
+            drone = self.drone_data[position]
+
+            # Remove drone from the air before moving it (or putting it back at same place)
             self.air[position] = None
 
             # Get action and drone position
-            action = Action.STAY if drone.index not in actions else Action(actions[drone.index])
-            if action is Action.LEFT:
+            action = ACTION_STAY if drone.index not in actions else actions[drone.index]
+            if action is ACTION_LEFT:
                 new_position = position[0], position[1] - 1
-            elif action is Action.DOWN:
+            elif action is ACTION_DOWN:
                 new_position = position[0] + 1, position[1]
-            elif action is Action.RIGHT:
+            elif action is ACTION_RIGHT:
                 new_position = position[0], position[1] + 1
-            elif action is Action.UP:
+            elif action is ACTION_UP:
                 new_position = position[0] - 1, position[1]
             else:
                 new_position = position
@@ -276,7 +235,7 @@ class DeliveryDrones(Env):
             # Is the drone planning to move outside the grid?
             if self.air.is_inside(new_position):
                 # Is the drone going into a skyscraper?
-                if self.ground[new_position] and self.ground[new_position].get_id() == Skyscraper.get_id():
+                if self.ground[new_position] == OBJ_SKYSCRAPER:
                     air_respawns.append(drone)
                 else:
                     new_positions[new_position].append(drone)
@@ -294,7 +253,7 @@ class DeliveryDrones(Env):
             drone = drones[0]
 
             # Drone discharges after each step, except if on station
-            if self.ground[position] and self.ground[position].get_id() == Station.get_id():
+            if self.ground[position] == OBJ_STATION:
                 drone.charge = min(100, drone.charge + self.env_params['charge'])  # charge
                 rewards[drone.index] = self.env_params['charge_reward']  # cost of charging
             else:
@@ -305,17 +264,17 @@ class DeliveryDrones(Env):
                     continue
 
             # Move the drone and check what's on the ground
-            self.air[position] = drone
+            self.drone_data[position] = drone
+            self.air[position] = OBJ_DRONE
 
             # Take packet if any
-            if (drone.packet is None) and self.ground[position] and self.ground[position].get_id() == Packet.get_id():
+            if (drone.packet is None) and (self.ground[position] == OBJ_PACKET):
                 rewards[drone.index] = self.env_params['pickup_reward']
                 drone.packet = self.ground[position]
                 self.ground[position] = None
 
             # Did we just deliver a packet?
-            elif (drone.packet is not None) and self.ground[position] and self.ground[
-                position].get_id() == Dropzone.get_id():
+            elif (drone.packet is not None) and (self.ground[position] == OBJ_DROPZONE):
                 # Pay the drone for the delivery
                 rewards[drone.index] = self.env_params['delivery_reward']
 
@@ -337,15 +296,21 @@ class DeliveryDrones(Env):
 
         # Respawn objects
         self.ground.spawn(ground_respawns)
-        skyscrapers, skyscrapers_positions = self.ground.get_objects(Skyscraper.get_id())
-        self._pick_packets_after_respawn(self.air.spawn(
-            air_respawns, exclude_positions=skyscrapers_positions))
+        skyscrapers, skyscrapers_positions = self.ground.get_objects(OBJ_SKYSCRAPER)
+        drones_positions = self.air.spawn([OBJ_DRONE] * len(air_respawns), exclude_positions=skyscrapers_positions)
 
         # Episode ends when drone respawns
         # FIXME should return also for drones which haven't moved at this timestep
         dones = {index: False for index in actions.keys()}
         for drone in air_respawns:
             dones[drone.index] = True
+
+        # Create new drone instances
+        for i, p in enumerate(zip(*drones_positions)):
+            self.drone_data[p] = air_respawns[i]
+
+        # Pick up any packet that's immediately under the drone
+        self._pick_packets_after_respawn(drones_positions)
 
         # Return new states, rewards, done and other infos
         info = {'air_respawns': air_respawns, 'ground_respawns': ground_respawns}
@@ -359,23 +324,30 @@ class DeliveryDrones(Env):
         # Create grids
         self.air = Grid(shape=self.shape)
         self.ground = Grid(shape=self.shape)
+        self.drone_data = {}
 
         # Create elements of the grid
-        self.packets = [Packet() for _ in range(self.env_params['packets_factor'] * self.env_params['n_drones'])]
-        self.dropzones = [Dropzone() for _ in range(self.env_params['dropzones_factor'] * self.env_params['n_drones'])]
-        self.stations = [Station() for _ in range(self.env_params['stations_factor'] * self.env_params['n_drones'])]
-        self.skyscrapers = [Skyscraper() for _ in
-                            range(self.env_params['skyscrapers_factor'] * self.env_params['n_drones'])]
-        self.drones = [Drone(index) for index in range(self.env_params['n_drones'])]
+        packets = [OBJ_PACKET] * (self.env_params['packets_factor'] * self.env_params['n_drones'])
+        dropzones = [OBJ_DROPZONE] * (self.env_params['dropzones_factor'] * self.env_params['n_drones'])
+        stations = [OBJ_STATION] * (self.env_params['stations_factor'] * self.env_params['n_drones'])
+        skyscrapers = [OBJ_SKYSCRAPER] * (self.env_params['skyscrapers_factor'] * self.env_params['n_drones'])
+        drones = [OBJ_DRONE] * self.env_params['n_drones']
 
-        # Spawn objects
-        self.ground.spawn(self.packets)
-        self.ground.spawn(self.dropzones)
-        self.ground.spawn(self.stations)
-        skyscrapers_position = self.ground.spawn(self.skyscrapers)
-        self._pick_packets_after_respawn(self.air.spawn(
-            self.drones, exclude_positions=skyscrapers_position
-        ))
+        # Spawn objects randomly on the map
+        self.ground.spawn(packets)
+        self.ground.spawn(dropzones)
+        self.ground.spawn(stations)
+        skyscrapers_position = self.ground.spawn(skyscrapers)
+        drones_positions = self.air.spawn(
+            drones,
+            exclude_positions=skyscrapers_position
+        )
+
+        # Create drone instances, and check if they immediately picked up packets
+        for i, p in enumerate(zip(*drones_positions)):
+            self.drone_data[p] = Drone(i)
+        self.drones = list(self.drone_data.values())
+        self._pick_packets_after_respawn(drones_positions)
 
         # Initialize elements required for RGB rendering
         self.__init_rgb_rendering()
@@ -403,13 +375,13 @@ class DeliveryDrones(Env):
                     continue  # Nothing to draw
 
                 if air is None:
-                    if isinstance(ground, Packet):
+                    if ground == OBJ_PACKET:
                         tile = self.tiles['packet']
-                    elif isinstance(ground, Dropzone):
+                    elif ground == OBJ_DROPZONE:
                         tile = self.tiles['dropzone']
-                    elif isinstance(ground, Station):
+                    elif ground == OBJ_STATION:
                         tile = self.tiles['station']
-                    elif isinstance(ground, Skyscraper):
+                    elif ground == OBJ_SKYSCRAPER:
                         tile = self.tiles['skyscraper']
                 else:
                     # If air is not None, then it's a drone
@@ -418,9 +390,9 @@ class DeliveryDrones(Env):
                     if drone.packet is None:
                         if ground == None:
                             tile = self.tiles['drone_{}'.format(drone.index)]
-                        elif isinstance(ground, Station):
+                        elif ground == OBJ_STATION:
                             tile = self.tiles['drone_{}_charging'.format(drone.index)]
-                        elif isinstance(ground, Dropzone):
+                        elif ground == OBJ_DROPZONE:
                             tile = self.tiles['drone_{}_dropzone'.format(drone.index)]
                     else:
                         tile = self.tiles['drone_{}_packet'.format(drone.index)]
@@ -448,58 +420,50 @@ class DeliveryDrones(Env):
         return {'ground': self.ground, 'air': self.air}
 
     def _pick_packets_after_respawn(self, positions):
-        packet_id = Packet.get_id()  # Get the ID of the Packet class
         for y, x in zip(*positions):
-            if self.ground[y, x] is not None and self.ground[y, x].get_id() == packet_id:
+            if self.ground[y, x] == OBJ_PACKET:
                 # Assign the packet from the ground to the air drone at the same position
-                self.air[y, x].packet = self.ground[y, x]
+                self.drone_data[(y, x)].packet = self.ground[y, x]
                 # Clear the ground position
                 self.ground[y, x] = None
 
     def __str__(self):
         # Convert air/ground tiles to text
-        def tiles_to_char(ground_tile, air_tile):
-            # Air is empty
+        def get_tile_char(y, x, ground_tile, air_tile):
             if air_tile is None:
-                if ground_tile is None:
-                    return ''
-                elif isinstance(ground_tile, Packet):
-                    return 'x'
-                elif isinstance(ground_tile, Dropzone):
-                    return '[ ]'
-                elif isinstance(ground_tile, Station):
-                    return '@'
-                elif isinstance(ground_tile, Skyscraper):
-                    return '#'
+                tile_chars = {
+                    None: '',
+                    OBJ_PACKET: 'x',
+                    OBJ_DROPZONE: '[ ]',
+                    OBJ_STATION: '@',
+                    OBJ_SKYSCRAPER: '#'
+                }
+                return tile_chars.get(ground_tile, '?')
+            else:
+                drone = self.drone_data.get((y, x), None)
+                if drone is not None:
+                    base_char = str(drone.index)
+                    suffix = 'x' if drone.packet is not None else ''
+                    prefix = {
+                        OBJ_STATION: '@',
+                        OBJ_DROPZONE: '[]'
+                    }.get(ground_tile, '')
+                    return f'{base_char}{prefix}{suffix}'
+                return '?'
 
-            # Air has a drone
-            elif isinstance(air_tile, Drone):
-                if air_tile.packet is None:
-                    if isinstance(ground_tile, Station):
-                        return '{}@'.format(air_tile.index)
-                    elif isinstance(ground_tile, Dropzone):
-                        return '[{}]'.format(air_tile.index)
-                    else:
-                        return '{}'.format(air_tile.index)
-                else:
-                    if isinstance(ground_tile, Station):
-                        return '{}@x'.format(air_tile.index)
-                    else:
-                        return '{}<x'.format(air_tile.index)
-            return '?'
-
-        grid_char = np.vectorize(tiles_to_char)(self.ground.grid, self.air.grid)
-
-        # Assemble tiles into a grid
-        tile_size = max(3, max([len(c) for c in grid_char.flatten()]))
-        row_sep = ('+' + '-' * tile_size) * self.shape[1] + '+'
+        # Assemble tiles into a grid representation
+        tile_size = 3
+        row_sep = '+' + ('-' * tile_size + '+') * self.shape[1]
         lines = [row_sep]
-        for i, row in enumerate(grid_char):
+
+        for y in range(self.shape[0]):
             line_str = '|'
-            for j, tile_str in enumerate(row):
-                tile_str = ' ' * ((tile_size - len(tile_str)) // 2) + tile_str
-                tile_str = tile_str.ljust(tile_size, ' ')
-                line_str += tile_str + '|'
+            for x in range(self.shape[1]):
+                ground_tile = self.ground.grid[y, x]
+                air_tile = self.air.grid[y, x]
+                tile_char = get_tile_char(y, x, ground_tile, air_tile)
+                padded_tile = tile_char.center(tile_size)
+                line_str += padded_tile + '|'
             lines.append(line_str)
             lines.append(row_sep)
 
