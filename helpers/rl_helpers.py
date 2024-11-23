@@ -50,8 +50,13 @@ class MultiAgentTrainer:
             agent.is_greedy = False
 
         for i in tqdm(range(n_steps), 'Training agents'):
+            # print(f"STEP {i}")
+            # print(states[0].device)
+            # print(self.env.render(mode='ansi'))
+
             # Select actions based on current states
             actions = {key: agent.act(states[key]) for key, agent in self.agents.items()}
+            # print(actions)
 
             # Perform the selected action
             next_states, rewards, dones, info, _ = self.env.step(actions)

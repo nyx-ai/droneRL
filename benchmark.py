@@ -1,9 +1,14 @@
 import os
+import torch
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+torch.autograd.set_detect_anomaly(True)
+
+import os
 import statistics
 import time
 import numpy as np
 
-NUMBER_OF_RUNS = 5
+NUMBER_OF_RUNS = 3
 
 
 def time_function(function, *args, **kwargs):
@@ -44,9 +49,11 @@ from agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
 from helpers.rl_helpers import MultiAgentTrainer, plot_rolling_rewards
 from helpers.rl_helpers import test_agents, plot_cumulative_rewards
 
-testing_env = WindowedGridView(DeliveryDrones(), radius=3)
+DEVICE = "mps"
+
+testing_env = WindowedGridView(DeliveryDrones(device=DEVICE), radius=3)
 testing_env.env_params.update({
-    'n_drones': 3,
+    'n_drones': 1,
     'charge_reward': -0.1,
     'crash_reward': -1,
     'pickup_reward': 0,
@@ -60,9 +67,9 @@ testing_env.env_params.update({
     'stations_factor': 2
 })
 
-training_env = WindowedGridView(DeliveryDrones(), radius=3)
+training_env = WindowedGridView(DeliveryDrones(device=DEVICE), radius=3)
 training_env.env_params.update({
-    'n_drones': 3,
+    'n_drones': 1,
     'charge_reward': -0.1,
     'crash_reward': -1,
     'pickup_reward': 0.1,
@@ -88,10 +95,10 @@ agents[0] = DQNAgent(
     # ),
     gamma=0.95,
     epsilon_start=1.0,
-    epsilon_decay=0.999,
-    epsilon_end=0.01,
+    epsilon_decay=0.9,
+    epsilon_end=1.0,
     memory_size=10000,
-    batch_size=64,
+    batch_size=4,
     target_update_interval=5
 )
 trainer = MultiAgentTrainer(training_env, agents, reset_agents=True, seed=0)
@@ -99,7 +106,7 @@ trainer = MultiAgentTrainer(training_env, agents, reset_agents=True, seed=0)
 timing_results = time_function(trainer.train, 1500)
 for key, value in timing_results.items():
     print(f"{key}: {value}")
-rewards_log = test_agents(testing_env, agents, n_steps=10_000, seed=0)
-print({k: statistics.mean(v) for k, v in rewards_log.items()})
-path = os.path.join('output', 'agents', f'benchmark-agent.pt')
-agents[0].save(path)
+# rewards_log = test_agents(testing_env, agents, n_steps=10_000, seed=0)
+# print({k: statistics.mean(v) for k, v in rewards_log.items()})
+# path = os.path.join('output', 'agents', f'benchmark-agent.pt')
+# agents[0].save(path)

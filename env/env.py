@@ -1,3 +1,4 @@
+import torch
 import itertools
 import os
 from collections import defaultdict
@@ -18,6 +19,7 @@ ACTION_RIGHT = 2
 ACTION_UP = 3
 ACTION_STAY = 4
 
+OBJ_EMPTY = -1
 OBJ_DRONE = 0
 OBJ_SKYSCRAPER = 1
 OBJ_STATION = 2
@@ -36,9 +38,10 @@ class Drone():
 
 
 class Grid:
-    def __init__(self, shape):
+    def __init__(self, shape, device):
         self.shape = shape
-        self.grid = np.full(shape, fill_value=None, dtype=object)
+        self.device = device
+        self.grid = torch.full(shape, -1, dtype=torch.int8, device=self.device)
 
     def __getitem__(self, key):
         return self.grid[key]
@@ -47,46 +50,71 @@ class Grid:
         self.grid[key] = value
 
     def get_objects(self, object_type, positions=None, zip_results=False):
+        return None, []
+
         """Filter objects matching criteria"""
-        objects_mask = np.vectorize(lambda tile: tile == object_type)(self.grid)
+        # Create a mask for the requested object type
+        objects_mask = (self.grid == object_type)
 
         if positions is not None:
-            position_mask = np.full(shape=self.shape, fill_value=False)
+            position_mask = torch.zeros_like(self.grid, dtype=torch.bool)
             for x, y in filter(self.is_inside, positions):
                 position_mask[x, y] = True
-            objects_mask = np.logical_and(objects_mask, position_mask)
+            objects_mask = objects_mask & position_mask
 
         if zip_results:
-            # Make things much easier in for loops ".. for obj, pos in get_objects(..)"
-            return zip(self[objects_mask], zip(*np.nonzero(objects_mask)))
+            # Yield objects and their positions using PyTorch's non-zero functionality
+            indices = objects_mask.nonzero(as_tuple=True)
+            return zip(self.grid[indices], zip(*indices))
         else:
-            # Numpy like format: objects, (pos_x, pos_y)
-            return self[objects_mask], np.nonzero(objects_mask)
+            # Return objects and their positions
+            indices = objects_mask.nonzero(as_tuple=True)
+            return self.grid[indices], indices
 
     def spawn(self, objects, exclude_positions=None):
         """Spawn objects on empty tiles. Return positions."""
-        positions_mask = (self.grid == None)
+        return tuple()
+
+        """
+        # Create a mask for empty positions
+        positions_mask = (self.grid == -1)
 
         if exclude_positions is not None:
-            except_mask = np.full(shape=positions_mask.shape, fill_value=True)
-            except_mask[exclude_positions] = False
-            positions_mask = np.logical_and(positions_mask, except_mask)
+            # Exclude specific positions from spawning
+            except_mask = torch.ones_like(self.grid, dtype=torch.bool)
+            for pos in exclude_positions:
+                except_mask[pos] = False
+            positions_mask = positions_mask & except_mask
 
-        flat_idxs = np.random.choice(np.flatnonzero(positions_mask), size=len(objects), replace=False)
-        idxs = np.unravel_index(flat_idxs, self.shape)
-        self.grid[idxs] = objects
-        return idxs
+        # Find all valid indices (empty positions) and shuffle them
+        indices = positions_mask.nonzero(as_tuple=False)  # Get indices as [N, 2] tensor
+        # if len(indices) < len(objects):
+        #     print("Not enough empty positions to spawn all objects!")
+        # num_obj = min(len(indices), len(objects))
+
+        # Randomly select indices for the objects
+        chosen_indices = indices[torch.randperm(indices.size(0))[:len(objects)]]
+
+        # Place objects at the chosen positions
+        self.grid[chosen_indices[:, 0], chosen_indices[:, 1]] = torch.tensor(objects, dtype=torch.int8, device=self.device)
+
+        # Return the positions of the spawned objects
+        return tuple(chosen_indices.T)
+        """
 
     def is_inside(self, position):
-        """Use NumPy to quickly check if a position is inside the grid bounds."""
-        return np.all(np.array(position) >= 0) and np.all(np.array(position) < np.array(self.shape))
+        """Check if a position is inside the grid bounds."""
+        x, y = position
+        return 0 <= x < self.shape[0] and 0 <= y < self.shape[1]
 
 
 class DeliveryDrones(Env):
     # OpenAI Gym environment fields
     metadata = {'render.modes': ['ansi']}
 
-    def __init__(self, env_params={}):
+    def __init__(self, env_params={}, device="cpu"):
+        self.device = device
+
         # Set environment parameters
         self.env_params = {
             'drone_density': 0.05,
@@ -213,75 +241,77 @@ class DeliveryDrones(Env):
         air_respawns = []
         ground_respawns = []
 
-        for _, position in self.air.get_objects(OBJ_DRONE, zip_results=True):
-            drone = self.drone_data[position]
-
-            # Remove drone from the air before moving it (or putting it back at same place)
-            self.air[position] = None
-
-            # Get action and drone position
-            action = ACTION_STAY if drone.index not in actions else actions[drone.index]
-            if action is ACTION_LEFT:
-                new_position = position[0], position[1] - 1
-            elif action is ACTION_DOWN:
-                new_position = position[0] + 1, position[1]
-            elif action is ACTION_RIGHT:
-                new_position = position[0], position[1] + 1
-            elif action is ACTION_UP:
-                new_position = position[0] - 1, position[1]
-            else:
-                new_position = position
-
-            # Is the drone planning to move outside the grid?
-            if self.air.is_inside(new_position):
-                # Is the drone going into a skyscraper?
-                if self.ground[new_position] == OBJ_SKYSCRAPER:
-                    air_respawns.append(drone)
-                else:
-                    new_positions[new_position].append(drone)
-            else:
-                air_respawns.append(drone)
-
-        # Further air navigation for drones that didn't go outside the grid
-        for position, drones in new_positions.items():
-            # Is there a collision?
-            if len(drones) > 1:
-                air_respawns.extend(drones)
-                continue
-
-            # Get drone
-            drone = drones[0]
-
-            # Drone discharges after each step, except if on station
-            if self.ground[position] == OBJ_STATION:
-                drone.charge = min(100, drone.charge + self.env_params['charge'])  # charge
-                rewards[drone.index] = self.env_params['charge_reward']  # cost of charging
-            else:
-                drone.charge -= self.env_params['discharge']  # discharge
-                # Without charge left, drone crashes
-                if drone.charge <= 0:
-                    air_respawns.append(drone)
-                    continue
-
-            # Move the drone and check what's on the ground
-            self.drone_data[position] = drone
-            self.air[position] = OBJ_DRONE
-
-            # Take packet if any
-            if (drone.packet is None) and (self.ground[position] == OBJ_PACKET):
-                rewards[drone.index] = self.env_params['pickup_reward']
-                drone.packet = self.ground[position]
-                self.ground[position] = None
-
-            # Did we just deliver a packet?
-            elif (drone.packet is not None) and (self.ground[position] == OBJ_DROPZONE):
-                # Pay the drone for the delivery
-                rewards[drone.index] = self.env_params['delivery_reward']
-
-                # Create new delivery
-                ground_respawns.extend([drone.packet, self.ground[position]])
-                self.ground[position] = None
-                drone.packet = None
+        # for _, p in self.air.get_objects(OBJ_DRONE, zip_results=True):
+        #     drone = self.drone_data[(p[0].item(), p[1].item())]
+        #
+        #     # Remove drone from the air before moving it (or putting it back at same place)
+        #     self.air[p] = OBJ_EMPTY
+        #
+        #     # Get action and drone position
+        #     action = ACTION_STAY if drone.index not in actions else actions[drone.index]
+        #     if action is ACTION_LEFT:
+        #         new_position = p[0], p[1] - 1
+        #     elif action is ACTION_DOWN:
+        #         new_position = p[0] + 1, p[1]
+        #     elif action is ACTION_RIGHT:
+        #         new_position = p[0], p[1] + 1
+        #     elif action is ACTION_UP:
+        #         new_position = p[0] - 1, p[1]
+        #     else:
+        #         new_position = p
+        #
+        #     # Is the drone planning to move outside the grid?
+        #     if self.air.is_inside(new_position):
+        #         # Is the drone going into a skyscraper?
+        #         if self.ground[new_position] == OBJ_SKYSCRAPER:
+        #             air_respawns.append(drone)
+        #         else:
+        #             new_positions[new_position].append(drone)
+        #     else:
+        #         air_respawns.append(drone)
+        #
+        # # Further air navigation for drones that didn't go outside the grid
+        # for p, drones in new_positions.items():
+        #     # Is there a collision?
+        #     if len(drones) > 1:
+        #         air_respawns.extend(drones)
+        #         continue
+        #
+        #     # Get drone
+        #     drone = drones[0]
+        #
+        #     # Drone discharges after each step, except if on station
+        #     if self.ground[p] == OBJ_STATION:
+        #         drone.charge = min(100, drone.charge + self.env_params['charge'])  # charge
+        #         rewards[drone.index] = self.env_params['charge_reward']  # cost of charging
+        #     else:
+        #         drone.charge -= self.env_params['discharge']  # discharge
+        #         # Without charge left, drone crashes
+        #         if drone.charge <= 0:
+        #             air_respawns.append(drone)
+        #             continue
+        #
+        #     # Move the drone and check what's on the ground
+        #     pi = (p[0].item(), p[1].item())
+        #     # print(f"moved drone {drone} to {pi}")
+        #     self.drone_data[pi] = drone
+        #     self.air[p] = OBJ_DRONE
+        #
+        #     # Take packet if any
+        #     if (drone.packet is None) and (self.ground[p] == OBJ_PACKET):
+        #         rewards[drone.index] = self.env_params['pickup_reward']
+        #         drone.packet = self.ground[p]
+        #         self.ground[p] = OBJ_EMPTY
+        #
+        #     # Did we just deliver a packet?
+        #     elif (drone.packet is not None) and (self.ground[p] == OBJ_DROPZONE):
+        #         # Pay the drone for the delivery
+        #         rewards[drone.index] = self.env_params['delivery_reward']
+        #
+        #         # Create new delivery
+        #         ground_respawns.extend([drone.packet, self.ground[p]])
+        #         self.ground[p] = OBJ_EMPTY
+        #         drone.packet = None
 
         # Handle drone crashes
         for drone in air_respawns:
@@ -305,9 +335,11 @@ class DeliveryDrones(Env):
         for drone in air_respawns:
             dones[drone.index] = True
 
-        # Create new drone instances
+        # Respawn crashed drones
         for i, p in enumerate(zip(*drones_positions)):
-            self.drone_data[p] = air_respawns[i]
+            pi = (p[0].item(), p[1].item())
+            # print(f"respawned drone {drone} to {pi}")
+            self.drone_data[pi] = air_respawns[i]
 
         # Pick up any packet that's immediately under the drone
         self._pick_packets_after_respawn(drones_positions)
@@ -322,8 +354,8 @@ class DeliveryDrones(Env):
         self.shape = (self.side_size, self.side_size)
 
         # Create grids
-        self.air = Grid(shape=self.shape)
-        self.ground = Grid(shape=self.shape)
+        self.air = Grid(shape=self.shape, device=self.device)
+        self.ground = Grid(shape=self.shape, device=self.device)
         self.drone_data = {}
 
         # Create elements of the grid
@@ -345,7 +377,8 @@ class DeliveryDrones(Env):
 
         # Create drone instances, and check if they immediately picked up packets
         for i, p in enumerate(zip(*drones_positions)):
-            self.drone_data[p] = Drone(i)
+            self.drone_data[(p[0].item(), p[1].item())] = Drone(i)
+            print(f"created drone {i} to {(p[0].item(), p[1].item())}")
         self.drones = list(self.drone_data.values())
         self._pick_packets_after_respawn(drones_positions)
 
@@ -423,16 +456,18 @@ class DeliveryDrones(Env):
         for y, x in zip(*positions):
             if self.ground[y, x] == OBJ_PACKET:
                 # Assign the packet from the ground to the air drone at the same position
-                self.drone_data[(y, x)].packet = self.ground[y, x]
+                self.drone_data[(y.item(), x.item())].packet = self.ground[y, x]
                 # Clear the ground position
-                self.ground[y, x] = None
+                self.ground[y, x] = OBJ_EMPTY
 
     def __str__(self):
         # Convert air/ground tiles to text
         def get_tile_char(y, x, ground_tile, air_tile):
-            if air_tile is None:
+            air_tile = air_tile.item()
+            ground_tile = ground_tile.item()
+            if air_tile is OBJ_EMPTY:
                 tile_chars = {
-                    None: '',
+                    OBJ_EMPTY: '',
                     OBJ_PACKET: 'x',
                     OBJ_DROPZONE: '[ ]',
                     OBJ_STATION: '@',

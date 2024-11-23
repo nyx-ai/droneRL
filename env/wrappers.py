@@ -1,3 +1,4 @@
+import torch
 from collections import OrderedDict
 
 import gym.spaces as spaces
@@ -221,56 +222,73 @@ class WindowedGridView(ObservationWrapper):
     """
 
     def __init__(self, env, radius):
-        # Initialize wrapper with observation space
         super().__init__(env)
         self.radius = radius
         assert radius > 0, "radius should be strictly positive"
 
+        # Observation space definition
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(self.radius * 2 + 1, self.radius * 2 + 1, 6), dtype=float)
+            low=0,
+            high=1,
+            shape=(self.radius * 2 + 1, self.radius * 2 + 1, 6),
+            dtype=float,
+        )
+
+
+        self.k = torch.zeros((1,42), device=self.device)
 
     def observation(self, _):
-        # Create grid
-        grid = np.zeros(shape=self.env.shape + (6,))
+        # Create a grid with 6 layers using PyTorch
+        # grid = torch.zeros((*self.env.shape, 6), dtype=torch.int, device=self.env.device)
+        # print(grid.device)
         states = {}
 
+        """
         # Drones (and their packets) + charge
         for _, (y, x) in self.env.air.get_objects(OBJ_DRONE, zip_results=True):
-            drone = self.drone_data[(y, x)]
+            drone = self.drone_data[(y.item(), x.item())]
             grid[y, x, 0] = 1
-
-            # if drone.packet is not None:
             if drone.packet is not None:
                 grid[y, x, 1] = 1
-            grid[y, x, 4] = drone.charge / 100
+            grid[y, x, 4] = drone.charge / 100.0
 
         # Packets
-        for packet, (y, x) in self.env.ground.get_objects(OBJ_PACKET, zip_results=True):
+        for _, (y, x) in self.env.ground.get_objects(OBJ_PACKET, zip_results=True):
             grid[y, x, 1] = 1
 
         # Dropzones
-        for dropzone, (y, x) in self.env.ground.get_objects(OBJ_DROPZONE, zip_results=True):
+        for _, (y, x) in self.env.ground.get_objects(OBJ_DROPZONE, zip_results=True):
             grid[y, x, 2] = 1
 
         # Stations
-        grid[self.env.ground.get_objects(OBJ_STATION)[1] + (3,)] = 1
+        station_positions = self.env.ground.get_objects(OBJ_STATION)[1]
+        if len(station_positions) > 0:
+            grid[station_positions[0], station_positions[1], 3] = 1
 
         # Obstacles
-        for skyscraper, (y, x) in self.env.ground.get_objects(OBJ_SKYSCRAPER, zip_results=True):
+        for _, (y, x) in self.env.ground.get_objects(OBJ_SKYSCRAPER, zip_results=True):
             grid[y, x, 5] = 1
+        """
 
-        # Pad
+        """
+        # Pad grid to handle drone-specific observations at edges
         padded_shape = (self.env.shape[0] + 2 * self.radius, self.env.shape[1] + 2 * self.radius, 6)
-        padded_grid = np.zeros(padded_shape)
-        padded_grid[:, :, 5] = 1  # walls
+        padded_grid = torch.zeros(padded_shape, dtype=torch.float32, device=self.env.device)
+        padded_grid[:, :, 5] = 1  # walls as obstacles
         padded_grid[self.radius:-self.radius, self.radius:-self.radius, :] = grid
 
-        # Return windowed state for each drone
+        # Extract windowed states for each drone
+        
         for _, (y, x) in self.env.air.get_objects(OBJ_DRONE, zip_results=True):
-            drone = self.drone_data[(y, x)]
-            states[drone.index] = padded_grid[y:y + 2 * self.radius + 1, x:x + 2 * self.radius + 1, :].copy()
+            # drone = self.drone_data[(y.item(), x.item())]
+            # FIXME states[drone.index]
+            states[0] = padded_grid[
+                                  y: y + 2 * self.radius + 1, x: x + 2 * self.radius + 1, :
+                                  ].clone()
+        """
+        states[0] = self.k
 
         return states
 
     def format_state(self, s):
-        return 'Numpy array {}'.format(s.shape)
+        return f"PyTorch tensor {s.shape}"

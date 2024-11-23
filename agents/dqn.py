@@ -1,3 +1,5 @@
+
+
 import random
 from collections import defaultdict, Counter
 from collections import deque
@@ -13,6 +15,36 @@ import os
 
 from .logging import Logger, NoLogger
 
+import torch
+
+# Save the original `to`, `cuda`, and `cpu` methods
+original_to = torch.Tensor.to
+original_cuda = torch.Tensor.cuda
+original_cpu = torch.Tensor.cpu
+
+# Define the tracking functions
+def track_to(self, *args, **kwargs):
+    new_device = kwargs.get('device', args[0] if args else None)
+    if new_device and self.device != new_device:
+        print(f"[ALERT] Tensor {self} moved from {self.device} to {new_device}")
+    return original_to(self, *args, **kwargs)
+
+def track_cuda(self, *args, **kwargs):
+    if self.device.type != 'cuda':
+        print(f"[ALERT] Tensor moved from {self.device} to cuda")
+    return original_cuda(self, *args, **kwargs)
+
+def track_cpu(self, *args, **kwargs):
+    if self.device.type != 'cpu':
+        print(f"[ALERT] Tensor moved from {self.device} to cpu")
+    return original_cpu(self, *args, **kwargs)
+
+# Patch the methods
+torch.Tensor.to = track_to
+torch.Tensor.cuda = track_cuda
+torch.Tensor.cpu = track_cpu
+
+
 # Determine and store the best available device globally
 device = os.getenv('DEVICE')
 if device is None:
@@ -20,8 +52,8 @@ if device is None:
         device = 'cuda'
     elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
         # For now not using mps device
-        print('device "mps" is available, but falling back to "cpu"')
-        device = 'cpu'
+        # print('device "mps" is available, but falling back to "cpu"')
+        device = 'mps'
     else:
         device = 'cpu'
 print(device)
@@ -34,39 +66,61 @@ class DenseQNetwork(nn.Module):
     """
 
     def __init__(self, env, hidden_layers=[]):
-        # Action space and observation spaces should be OpenAI gym spaces
+        # Ensure action and observation spaces are compatible
         assert isinstance(env.observation_space, spaces.Space), 'Observation space should be an OpenAI Gym space'
         assert isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
 
-        # Create network
-        super().__init__()  # Initialize module
+        # Initialize module
+        super().__init__()
         self.env = env  # Save environment
 
-        self.input_size = spaces.flatdim(self.env.observation_space)
-        self.output_size = self.env.action_space.n
-        self.hidden_layers = hidden_layers
+        # Compute the input size (flattened observation space)
+        self.input_size = 42#self._calculate_flatdim(env.observation_space)
+        print("---")
+        print(self.input_size)
+        print(self._calculate_flatdim(env.observation_space))
+        self.output_size = env.action_space.n
 
+        # Define the network layers
+        self.hidden_layers = hidden_layers
         self.network = nn.Sequential()
         hidden_layers = hidden_layers + [self.output_size]
+
         for i, hidden_size in enumerate(hidden_layers):
-            # Create layer
+            # Define input and output features
             in_features = self.input_size if i == 0 else hidden_layers[i - 1]
-            out_features = hidden_layers[i]
+            out_features = hidden_size
+
+            # Create and add layers
             layer = nn.Linear(in_features, out_features)
+            self.network.add_module(f'dense_{i + 1}', layer)
+            if i < len(hidden_layers) - 1:  # Add ReLU activation after every layer except the last
+                self.network.add_module(f'dense_act_{i + 1}', nn.ReLU())
 
-            # Add layer + activation
-            if i > 0:
-                self.network.add_module('dense_act_{}'.format(i), nn.ReLU())
-            self.network.add_module('dense_{}'.format(i + 1), layer)
-
-        # Move network to GPU if available
         self.network.to(device)
 
     def forward(self, states):
-        # Efficient flattening of states and tensor conversion
-        states_flattened = np.array([spaces.flatten(self.env.observation_space, s) for s in states])
-        states_tensor = torch.Tensor(states_flattened).to(device)
-        return self.network(states_tensor)
+        # Flatten states and pass through the network
+        if isinstance(states, torch.Tensor):
+            states_flattened = states.view(states.size(0), -1)
+        else:
+            raise TypeError("Input states must be a PyTorch tensor.")
+        return self.network(states_flattened)
+
+    def _calculate_flatdim(self, space):
+        """
+        Calculate the flattened dimension of a Gym space using PyTorch.
+        """
+        if isinstance(space, spaces.Box):
+            return int(torch.prod(torch.tensor(space.shape)))
+        elif isinstance(space, spaces.Discrete):
+            return int(space.n)
+        elif isinstance(space, spaces.MultiBinary):
+            return int(space.n)
+        elif isinstance(space, spaces.MultiDiscrete):
+            return int(torch.sum(torch.tensor(space.nvec)))
+        else:
+            raise NotImplementedError(f"Flattening for {type(space)} is not implemented.")
 
 
 class ConvQNetwork(nn.Module):
@@ -270,30 +324,30 @@ class DQNAgent():
             batch = [self.memory[idx] for idx in batch_indices]
             state, action, reward, next_state, done = zip(*batch)
 
-            action = LongTensor(action).to(device)
-            reward = Tensor(reward).to(device)
-            done = Tensor(done).to(device)
+            # action = LongTensor(action).to(device)
+            # reward = Tensor(reward).to(device)
+            # done = Tensor(done).to(device)
 
             # Q-value for current state given current action
-            q_values = self.qnetwork(state)
-            q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
+            q_values = self.qnetwork(state[0])
+            # q_value = q_values.gather(1, action.unsqueeze(1)).squeeze(1)
 
             # Compute the TD target
-            next_q_values = self.target_qnetwork(next_state)
+            next_q_values = self.target_qnetwork(next_state[0])
             next_q_value = next_q_values.max(1)[0]
 
-            td_target = reward + self.gamma * next_q_value * (1 - done)
-
-            # Optimize quadratic loss
-            loss = (q_value - td_target.detach()).pow(2).mean()
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-
-            self.logger.log_dict(self.total_steps, {
-                'dqn/loss': loss.item(),
-                'dqn/reward': reward.mean().item(),
-            })
+            # td_target = reward + self.gamma * next_q_value * (1 - done)
+            #
+            # # Optimize quadratic loss
+            # loss = (q_value - td_target.detach()).pow(2).mean()
+            # self.optimizer.zero_grad()
+            # loss.backward()
+            # self.optimizer.step()
+            #
+            # self.logger.log_dict(self.total_steps, {
+            #     'dqn/loss': loss.item(),
+            #     'dqn/reward': reward.mean().item(),
+            # })
         else:
             # print(f"Not learning yet! {len(self.memory)}/{self.batch_size} experiences")
             pass
