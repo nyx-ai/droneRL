@@ -99,22 +99,22 @@ class DeliveryDrones(Env):
     def reset(self, key: jax.Array, params: DroneEnvParams, grid_size: int):
         # build grids
         air = jnp.zeros((grid_size, grid_size), dtype=jnp.int32)  # TODO check whether uint8 grids could be used instead
-        ground = jnp.zeros((grid_size, grid_size), dtype=jnp.int32)
+        ground = jnp.zeros((grid_size, grid_size), dtype=jnp.int8)
         # place objects
         num_packets = params.packets_factor * params.n_drones
         num_dropzones = params.dropzones_factor * params.n_drones
         num_stations = params.stations_factor * params.n_drones
         num_skyscrapers = params.skyscrapers_factor * params.n_drones
         key, spawn_key = jax.random.split(key)
-        ground = self.spawn(spawn_key, ground, jnp.ones(num_packets, dtype=jnp.int32) * OBJ_PACKET)
+        ground = self.spawn(spawn_key, ground, jnp.ones(num_packets, dtype=jnp.int8) * OBJ_PACKET)
         key, spawn_key = jax.random.split(key)
-        ground= self.spawn(spawn_key, ground, jnp.ones(num_dropzones, dtype=jnp.int32) * OBJ_DROPZONE)
+        ground= self.spawn(spawn_key, ground, jnp.ones(num_dropzones, dtype=jnp.int8) * OBJ_DROPZONE)
         key, spawn_key = jax.random.split(key)
-        ground = self.spawn(spawn_key, ground, jnp.ones(num_stations, dtype=jnp.int32) * OBJ_STATION)
+        ground = self.spawn(spawn_key, ground, jnp.ones(num_stations, dtype=jnp.int8) * OBJ_STATION)
         key, spawn_key = jax.random.split(key)
-        ground = self.spawn(spawn_key, ground, jnp.ones(num_skyscrapers, dtype=jnp.int32) * OBJ_SKYSCRAPER)
+        ground = self.spawn(spawn_key, ground, jnp.ones(num_skyscrapers, dtype=jnp.int8) * OBJ_SKYSCRAPER)
         key, spawn_key = jax.random.split(key)
-        air = self.spawn(spawn_key, air, jnp.arange(1, params.n_drones + 1), exclude_mask=(ground == OBJ_SKYSCRAPER))
+        air = self.spawn(spawn_key, air, jnp.arange(1, params.n_drones + 1, dtype=jnp.int32), exclude_mask=(ground == OBJ_SKYSCRAPER))
 
         # check if drones picked up package
         package_mask = (ground == OBJ_PACKET)
@@ -188,7 +188,7 @@ class DeliveryDrones(Env):
         key, spawn_key = jax.random.split(key)
         num_packets = params.packets_factor * params.n_drones
         delivered = ~delivered
-        fill_values = jnp.zeros(num_packets, dtype=jnp.int32)
+        fill_values = jnp.zeros(num_packets, dtype=jnp.int8)
         # trick: if no deliveries took place we spawn a "0", else OBJ_PACKET
         fill_values = fill_values.at[:len(delivered)].set(delivered * OBJ_PACKET)
         ground = self.spawn(spawn_key, ground, fill_values)
@@ -210,9 +210,9 @@ class DeliveryDrones(Env):
 
         # air respawns
         key, spawn_key = jax.random.split(key)
-        alive_player_ids = jnp.arange(1, params.n_drones + 1) * ~dones  # only alive player IDs are set
+        alive_player_ids = jnp.arange(1, params.n_drones + 1, dtype=jnp.int32) * ~dones  # only alive player IDs are set
         air = state.air.at[drone_y, drone_x].set(alive_player_ids)
-        dead_player_ids = jnp.arange(1, params.n_drones + 1) * dones  # only dead player IDs are set
+        dead_player_ids = jnp.arange(1, params.n_drones + 1, dtype=jnp.int32) * dones  # only dead player IDs are set
         air = self.spawn(
                 spawn_key,
                 air,
@@ -221,7 +221,7 @@ class DeliveryDrones(Env):
 
         # potentially pick up newly spawned packages
         package_mask = (ground == OBJ_PACKET)
-        can_pick_up = jnp.array([jnp.any((air == player) & package_mask) for player in range(1, params.n_drones + 1)])
+        can_pick_up = jnp.array([jnp.any((air == player) & package_mask) for player in range(1, params.n_drones + 1)], dtype=jnp.bool)
         picked_up = can_pick_up & dones  # all the newly spawned players that can now pick up a package
         carrying_package |= picked_up
 
@@ -260,8 +260,6 @@ class DeliveryDrones(Env):
             params: DroneEnvParams,
             num_steps: int,
             ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-
-        # step_jit = jax.jit(self.step, static_argnums=(3,))
 
         def loop_body(i, carry):
             rng, state, rewards, dones = carry
@@ -310,8 +308,6 @@ if __name__ == "__main__":
     # te = timer()
     # print(f'... took {te-ts:.2f}s ({(te-ts)/num_steps:.5f}s/step)')
     # __import__('pdb').set_trace()
-
-
 
     step_jit = jax.jit(env.step, static_argnums=(3,))
     # step_jit = env.step
