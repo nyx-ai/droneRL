@@ -298,13 +298,13 @@ if __name__ == "__main__":
     from jax.experimental.compilation_cache import compilation_cache as cc
     cc.set_cache_dir('./jax_cache')
 
+    # grid_size = 8
+    # n_drones = 3
     # grid_size = 370
     # n_drones = 4096
     grid_size = 185
     n_drones = 1024
 
-    # grid_size = 8
-    # n_drones = 3
     drone_density = n_drones / (grid_size ** 2)
 
     params = DroneEnvParams(n_drones=n_drones, drone_density=drone_density)
@@ -313,18 +313,41 @@ if __name__ == "__main__":
     # grid_size = int(jnp.ceil(jnp.sqrt(params.n_drones / params.drone_density)))
     rng = jax.random.PRNGKey(0)
 
-    # state = env.reset(rng, params, grid_size)
-    state = jax.jit(env.reset, static_argnums=(1, 2))(rng, params, grid_size)
+    ############
+    # jit + fori
+    ############
+    # # state = env.reset(rng, params, grid_size)
+    # state = jax.jit(env.reset, static_argnums=(1, 2))(rng, params, grid_size)
+    # num_steps = 1000
+    # print(f'Start running {num_steps:,} steps...')
+    # ts = timer()
+    # run_steps_jit = jax.jit(env.run_steps, static_argnums=(2, 3))
+    # state, rewards, dones = run_steps_jit(rng, state, params, 100)
+    # rewards.block_until_ready()
+    # te = timer()
+    # print(f'... jit+fori took {te-ts:.2f}s ({(te-ts)/num_steps:.5f}s/step)')
 
+    ############
+    # jit + vmap
+    ############
+    num_envs = 100
+    keys = jax.random.split(rng, num_envs)
+    state = jax.jit(jax.vmap(env.reset, in_axes=[0, None, None]), static_argnums=(1, 2))(keys, params, grid_size)
     num_steps = 1000
     print(f'Start running {num_steps:,} steps...')
     ts = timer()
-    run_steps_jit = jax.jit(env.run_steps, static_argnums=(2, 3))
-    state, rewards, dones = run_steps_jit(rng, state, params, 100)
+    rng, _ = jax.random.split(rng)
+    keys = jax.random.split(rng, num_envs)
+    run_steps_jit = jax.jit(jax.vmap(env.run_steps, in_axes=[0, 0, None, None]), static_argnums=(2, 3))
+    state, rewards, dones = run_steps_jit(keys, state, params, 100)
     rewards.block_until_ready()
     te = timer()
-    print(f'... took {te-ts:.2f}s ({(te-ts)/num_steps:.5f}s/step)')
+    print(f'... took {te-ts:.2f}s ({(te-ts)/(num_steps*num_envs):.5f}s/step)')
+    __import__('pdb').set_trace()
 
+    #######################
+    # jit + Python for-loop
+    #######################
     # # step_jit = jax.jit(env.step, static_argnums=(3,))
     # step_jit = env.step
     # num_steps = 100
@@ -335,4 +358,4 @@ if __name__ == "__main__":
     #     actions = jax.random.randint(key, (params.n_drones,), 0, NUM_ACTIONS, dtype=jnp.int32)
     #     state, rewards, dones = step_jit(rng, state, actions, params)
     # te = timer()
-    # print(f'... took {te-ts:.2f}s ({(te-ts)/num_steps:.4f}s/step)')
+    # print(f'... jit+for-loop took {te-ts:.2f}s ({(te-ts)/num_steps:.4f}s/step)')
