@@ -8,30 +8,7 @@ from timeit import default_timer as timer
 
 
 @dataclass
-class EnvState:
-    pass
-
-
-@dataclass
-class EnvParams:
-    pass
-
-
-class Env:
-    "Environment base class for JAX"
-    def reset(self, key: jax.Array):
-        raise NotImplementedError
-
-    def step(
-            self,
-            key: jax.Array,
-            state: EnvState,
-            action: jax.Array):
-        raise NotImplementedError
-
-
-@dataclass
-class DroneEnvParams(EnvParams):
+class DroneEnvParams:
     drone_density: float = 0.05
     n_drones: int = 3
     pickup_reward: float = 0.0
@@ -48,7 +25,7 @@ class DroneEnvParams(EnvParams):
 
 
 @dataclass
-class DroneEnvState(EnvState):
+class DroneEnvState:
     ground: jnp.ndarray
     air: jnp.ndarray
     carrying_package: jnp.ndarray
@@ -68,10 +45,7 @@ OBJ_DROPZONE = 4
 OBJ_PACKET = 5
 
 
-class DeliveryDrones(Env):
-    def __init__(self) -> None:
-        pass
-
+class DeliveryDrones:
     def spawn(
             self,
             key: jnp.ndarray,
@@ -273,7 +247,7 @@ class DeliveryDrones(Env):
             state: DroneEnvState,
             params: DroneEnvParams,
             num_steps: int,
-            ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+            ) -> Tuple[DroneEnvState, jnp.ndarray, jnp.ndarray]:
 
         def loop_body(i, carry):
             rng, state, rewards, dones = carry
@@ -286,8 +260,6 @@ class DeliveryDrones(Env):
         carry = jax.lax.fori_loop(0, num_steps, loop_body, carry)
         _, state, rewards, dones = carry
         return state, rewards, dones
-
-
 
 
     def format_action(self, *actions):
@@ -356,8 +328,9 @@ if __name__ == "__main__":
     step_jit = jax.jit(env.step, static_argnums=(3,))
     # step_jit = env.step
     repeats = 5
+    skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
     num_steps = 100
-    print(f'Running {num_steps:,} steps {repeats} times...')
+    print(f'Running {num_steps:,} steps {repeats} times (skipping {skip} first runs)...')
     times = []
     for _ in range(repeats):
         ts = timer()
@@ -367,6 +340,6 @@ if __name__ == "__main__":
             state, rewards, dones = step_jit(rng, state, actions, params)
         te = timer()
         times.append(te - ts)
-    mean, std = statistics.mean(times), statistics.stdev(times)
+    mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
     print(f'... jit+for-loop took {mean:.2f}s (±{std:.3f}) or {mean/num_steps:.4f}s/step (±{std/num_steps:.4f})')
     __import__('pdb').set_trace()
