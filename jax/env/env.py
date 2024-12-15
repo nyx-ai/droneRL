@@ -296,16 +296,20 @@ class DeliveryDrones(Env):
 
 if __name__ == "__main__":
     from jax.experimental.compilation_cache import compilation_cache as cc
+    import statistics
     cc.set_cache_dir('./jax_cache')
 
     # grid_size = 8
     # n_drones = 3
     # grid_size = 370
     # n_drones = 4096
-    grid_size = 185
-    n_drones = 1024
+    # grid_size = 185
+    # n_drones = 1024
+    grid_size = 64
+    n_drones = int(0.03 * (grid_size ** 2))
 
     drone_density = n_drones / (grid_size ** 2)
+    print(f'Num drones: {n_drones}, grid: {grid_size}x{grid_size}, drone density: {drone_density:.2f}')
 
     params = DroneEnvParams(n_drones=n_drones, drone_density=drone_density)
     env = DeliveryDrones()
@@ -330,32 +334,39 @@ if __name__ == "__main__":
     ############
     # jit + vmap
     ############
-    num_envs = 100
-    keys = jax.random.split(rng, num_envs)
-    state = jax.jit(jax.vmap(env.reset, in_axes=[0, None, None]), static_argnums=(1, 2))(keys, params, grid_size)
-    num_steps = 1000
-    print(f'Start running {num_steps:,} steps...')
-    ts = timer()
-    rng, _ = jax.random.split(rng)
-    keys = jax.random.split(rng, num_envs)
-    run_steps_jit = jax.jit(jax.vmap(env.run_steps, in_axes=[0, 0, None, None]), static_argnums=(2, 3))
-    state, rewards, dones = run_steps_jit(keys, state, params, 100)
-    rewards.block_until_ready()
-    te = timer()
-    print(f'... took {te-ts:.2f}s ({(te-ts)/(num_steps*num_envs):.5f}s/step)')
-    __import__('pdb').set_trace()
+    # num_envs = 100
+    # keys = jax.random.split(rng, num_envs)
+    # state = jax.jit(jax.vmap(env.reset, in_axes=[0, None, None]), static_argnums=(1, 2))(keys, params, grid_size)
+    # num_steps = 1000
+    # print(f'Start running {num_steps:,} steps...')
+    # ts = timer()
+    # rng, _ = jax.random.split(rng)
+    # keys = jax.random.split(rng, num_envs)
+    # run_steps_jit = jax.jit(jax.vmap(env.run_steps, in_axes=[0, 0, None, None]), static_argnums=(2, 3))
+    # state, rewards, dones = run_steps_jit(keys, state, params, 100)
+    # rewards.block_until_ready()
+    # te = timer()
+    # print(f'... took {te-ts:.2f}s ({(te-ts)/(num_steps*num_envs):.5f}s/step)')
 
     #######################
     # jit + Python for-loop
     #######################
-    # # step_jit = jax.jit(env.step, static_argnums=(3,))
+    # # state = env.reset(rng, params, grid_size)
+    state = jax.jit(env.reset, static_argnums=(1, 2))(rng, params, grid_size)
+    step_jit = jax.jit(env.step, static_argnums=(3,))
     # step_jit = env.step
-    # num_steps = 100
-    # ts = timer()
-    # print(f'Start running {num_steps:,} steps sequentially...')
-    # for i in trange(num_steps):
-    #     rng, key = jax.random.split(rng)
-    #     actions = jax.random.randint(key, (params.n_drones,), 0, NUM_ACTIONS, dtype=jnp.int32)
-    #     state, rewards, dones = step_jit(rng, state, actions, params)
-    # te = timer()
-    # print(f'... jit+for-loop took {te-ts:.2f}s ({(te-ts)/num_steps:.4f}s/step)')
+    repeats = 5
+    num_steps = 100
+    print(f'Running {num_steps:,} steps {repeats} times...')
+    times = []
+    for _ in range(repeats):
+        ts = timer()
+        for i in trange(num_steps):
+            rng, key = jax.random.split(rng)
+            actions = jax.random.randint(key, (params.n_drones,), 0, NUM_ACTIONS, dtype=jnp.int32)
+            state, rewards, dones = step_jit(rng, state, actions, params)
+        te = timer()
+        times.append(te - ts)
+    mean, std = statistics.mean(times), statistics.stdev(times)
+    print(f'... jit+for-loop took {mean:.2f}s (±{std:.3f}) or {mean/num_steps:.4f}s/step (±{std/num_steps:.4f})')
+    __import__('pdb').set_trace()
