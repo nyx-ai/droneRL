@@ -282,72 +282,100 @@ if __name__ == "__main__":
     ############
     # jit + fori
     ############
-    # state = env.reset(rng, params, grid_size)
-    state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
-    num_steps = 1000
-    repeats = 5
-    skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
-    print(f'Start running {num_steps:,} steps {repeats} times...')
-    times = []
-    for _ in trange(repeats):
-        ts = timer()
-        run_steps_jit = jax.jit(env.run_steps, static_argnums=(2, 3))
-        state, rewards, dones = run_steps_jit(rng, state, params, 100)
-        rewards.block_until_ready()
-        times.append(timer() - ts)
-    mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
-    print(f'... jit+fori took {mean:.2f}s (±{std:.3f}) or {1000*mean/(num_steps):.4f}s/1k steps (±{1000*std/num_steps:.4f})')
+    # # state = env.reset(rng, params, grid_size)
+    # state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
+    # num_steps = 1000
+    # repeats = 5
+    # skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
+    # print(f'Start running {num_steps:,} steps {repeats} times...')
+    # times = []
+    # run_steps_jit = jax.jit(env.run_steps, static_argnums=(2, 3))
+    # for _ in trange(repeats):
+    #     ts = timer()
+    #     state, rewards, dones = run_steps_jit(rng, state, params, num_steps)
+    #     rewards.block_until_ready()
+    #     times.append(timer() - ts)
+    # mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
+    # print(f'... jit+fori took {mean:.2f}s (±{std:.3f}) or {1000*mean/(num_steps):.4f}s/1k steps (±{1000*std/num_steps:.4f})')
+
+    ###################
+    # jit + vmap + fori
+    ###################
+    # num_envs = 4
+    # keys = jax.random.split(rng, num_envs)
+    # state = jax.jit(jax.vmap(env.reset, in_axes=[0, None]), static_argnums=(1,))(keys, params)
+    # num_steps = 100
+    # repeats = 5
+    # skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
+    # print(f'Start running {num_steps:,} steps with {num_envs:,} envs for {repeats} times...')
+    # run_steps_jit = jax.jit(jax.vmap(env.run_steps, in_axes=[0, 0, None, None]), static_argnums=(2, 3))
+    # times = []
+    # for _ in trange(repeats):
+    #     ts = timer()
+    #     rng, _ = jax.random.split(rng)
+    #     keys = jax.random.split(rng, num_envs)
+    #     state, rewards, dones = run_steps_jit(keys, state, params, num_steps)
+    #     rewards.block_until_ready()
+    #     times.append(timer() - ts)
+    # mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
+    # print(f'... jit+vmap+fori took {mean:.2f}s (±{std:.3f}) or {1000*mean/(num_steps*num_envs):.4f}s/1k steps (±{1000*std/(num_steps * num_envs):.4f})')
+    #
+    # #######################
+    # # jit + Python for-loop
+    # #######################
+    # # state = env.reset(rng, params)
+    # state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
+    # step_jit = jax.jit(env.step, static_argnums=(3,))
+    # # step_jit = env.step
+    # repeats = 5
+    # skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
+    # num_steps = 1000
+    # print(f'Running {num_steps:,} steps {repeats} times (skipping {skip} first runs)...')
+    # times = []
+    # for _ in range(repeats):
+    #     ts = timer()
+    #     for i in trange(num_steps):
+    #         rng, key = jax.random.split(rng)
+    #         actions = jax.random.randint(key, (params.n_drones,), 0, NUM_ACTIONS, dtype=jnp.int32)
+    #         state, rewards, dones = step_jit(rng, state, actions, params)
+    #
+    #         # # tracing
+    #         # state, rewards, dones = step_jit(rng, state, actions, params)
+    #         # state, rewards, dones = step_jit(rng, state, actions, params)
+    #         # with jax.profiler.trace("jax-trace-v2"):
+    #         #     state, rewards, dones = step_jit(rng, state, actions, params)
+    #         #     rewards.block_until_ready()
+    #         # __import__('pdb').set_trace()
+    #     te = timer()
+    #     times.append(te - ts)
+    # mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
+    # print(f'... jit+for-loop took {mean:.2f}s (±{std:.3f}) or {1000*mean/num_steps:.4f}s/1k steps (±{1000*std/num_steps:.4f})')
 
     ############
-    # jit + vmap
+    # pmap+vmap+fori
     ############
-    num_envs = 4
+    from flax.training.common_utils import shard
+    num_envs = 1024
     keys = jax.random.split(rng, num_envs)
     state = jax.jit(jax.vmap(env.reset, in_axes=[0, None]), static_argnums=(1,))(keys, params)
-    num_steps = 1000
+    num_devices = jax.device_count()
+    state = shard(state)
+    num_steps = 100
     repeats = 5
     skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
     print(f'Start running {num_steps:,} steps with {num_envs:,} envs for {repeats} times...')
     times = []
+    p_run_steps = jax.pmap(
+            jax.vmap(env.run_steps, in_axes=[0, 0, None, None]),
+            static_broadcasted_argnums=(2, 3))
     for _ in trange(repeats):
         ts = timer()
         rng, _ = jax.random.split(rng)
         keys = jax.random.split(rng, num_envs)
-        run_steps_jit = jax.jit(jax.vmap(env.run_steps, in_axes=[0, 0, None, None]), static_argnums=(2, 3))
-        state, rewards, dones = run_steps_jit(keys, state, params, 100)
+        keys = shard(keys)
+        state, rewards, dones = p_run_steps(keys, state, params, num_steps)
         rewards.block_until_ready()
         times.append(timer() - ts)
     mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
-    print(f'... jit+fori+vmap took {mean:.2f}s (±{std:.3f}) or {1000*mean/(num_steps*num_envs):.4f}s/1k steps (±{1000*std/(num_steps * num_envs):.4f})')
-
-    #######################
-    # jit + Python for-loop
-    #######################
-    # state = env.reset(rng, params)
-    state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
-    step_jit = jax.jit(env.step, static_argnums=(3,))
-    # step_jit = env.step
-    repeats = 5
-    skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
-    num_steps = 1000
-    print(f'Running {num_steps:,} steps {repeats} times (skipping {skip} first runs)...')
-    times = []
-    for _ in range(repeats):
-        ts = timer()
-        for i in trange(num_steps):
-            rng, key = jax.random.split(rng)
-            actions = jax.random.randint(key, (params.n_drones,), 0, NUM_ACTIONS, dtype=jnp.int32)
-            state, rewards, dones = step_jit(rng, state, actions, params)
-
-            # # tracing
-            # state, rewards, dones = step_jit(rng, state, actions, params)
-            # state, rewards, dones = step_jit(rng, state, actions, params)
-            # with jax.profiler.trace("jax-trace-v2"):
-            #     state, rewards, dones = step_jit(rng, state, actions, params)
-            #     rewards.block_until_ready()
-            # __import__('pdb').set_trace()
-        te = timer()
-        times.append(te - ts)
-    mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
-    print(f'... jit+for-loop took {mean:.2f}s (±{std:.3f}) or {1000*mean/num_steps:.4f}s/1k steps (±{1000*std/num_steps:.4f})')
+    print(f'... pmap+vmap+fori took {mean:.2f}s (±{std:.3f}) or {1000*mean/(num_steps*num_envs):.4f}s/1k steps (±{1000*std/(num_steps * num_envs):.4f})')
     __import__('pdb').set_trace()
