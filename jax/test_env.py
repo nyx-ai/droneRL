@@ -115,7 +115,7 @@ def test_reset(simple_params):
     num_dropzones = simple_params.dropzones_factor * simple_params.n_drones
     num_stations = simple_params.stations_factor * simple_params.n_drones
     num_skyscrapers = simple_params.skyscrapers_factor * simple_params.n_drones
-    assert jnp.sum(state.ground == OBJ_PACKET) == num_packets - 1  # 1 package has been picked up
+    assert jnp.sum(state.ground == OBJ_PACKET) == num_packets - 2  # 2 packages have been picked up
     assert jnp.sum(state.ground == OBJ_STATION) == num_stations
     assert jnp.sum(state.ground == OBJ_SKYSCRAPER) == num_skyscrapers
     assert jnp.sum(state.ground == OBJ_DROPZONE) == num_dropzones
