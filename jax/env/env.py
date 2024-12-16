@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Tuple, Union
 import jax
+from jax.lax import pbroadcast
 import jax.numpy as jnp
 import jax.random
 from tqdm import trange
@@ -9,7 +10,7 @@ from timeit import default_timer as timer
 
 @dataclass
 class DroneEnvParams:
-    drone_density: float = 0.05
+    grid_size: int = 8
     n_drones: int = 3
     pickup_reward: float = 0.0
     delivery_reward: float = 1.0
@@ -27,7 +28,8 @@ class DroneEnvParams:
 @dataclass
 class DroneEnvState:
     ground: jnp.ndarray
-    air: jnp.ndarray
+    air_x: jnp.ndarray
+    air_y: jnp.ndarray
     carrying_package: jnp.ndarray
     charge: jnp.ndarray
 
@@ -69,12 +71,30 @@ class DeliveryDrones:
         (grid, _), _ = jax.lax.scan(_place, (grid, key), fill_values)
         return grid
 
+    def spawn_air(
+            self,
+            key: jnp.ndarray,
+            x_pos: jnp.ndarray,
+            y_pos: jnp.ndarray,
+            params: DroneEnvParams,
+            exclude: Optional[jnp.ndarray] = None,
+            ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        p_choice = jnp.ones((params.grid_size, params.grid_size), dtype=jnp.float32)
+        p_choice = p_choice.at[x_pos, y_pos].set(0)
+        if exclude is not None:
+            p_choice = jnp.where(exclude, 0, p_choice)
+        p_choice = p_choice.ravel()
+        pos = jax.random.choice(key, params.grid_size ** 2, shape=(params.n_drones,), p=p_choice)
+        random_x_pos = pos // params.grid_size
+        random_y_pos = pos % params.grid_size
+        x_pos = jnp.where(x_pos == -1, random_x_pos, x_pos)
+        y_pos = jnp.where(y_pos == -1, random_y_pos, y_pos)
+        return x_pos, y_pos
 
-    def reset(self, key: jax.Array, params: DroneEnvParams, grid_size: int):
-        # build grids
-        air = jnp.zeros((grid_size, grid_size), dtype=jnp.int32)
-        ground = jnp.zeros((grid_size, grid_size), dtype=jnp.int8)
-        # place objects
+
+    def reset(self, key: jax.Array, params: DroneEnvParams):
+        # spawn objects
+        ground = jnp.zeros((params.grid_size, params.grid_size), dtype=jnp.int8)
         num_packets = params.packets_factor * params.n_drones
         num_dropzones = params.dropzones_factor * params.n_drones
         num_stations = params.stations_factor * params.n_drones
@@ -87,28 +107,22 @@ class DeliveryDrones:
         ground = self.spawn(spawn_key, ground, jnp.ones(num_stations, dtype=jnp.int8) * OBJ_STATION)
         key, spawn_key = jax.random.split(key)
         ground = self.spawn(spawn_key, ground, jnp.ones(num_skyscrapers, dtype=jnp.int8) * OBJ_SKYSCRAPER)
+        # spawn drones
+        air_x = -1 * jnp.ones(params.n_drones, dtype=jnp.int32)  # set positions to -1 for now
+        air_y = -1 * jnp.ones(params.n_drones, dtype=jnp.int32)  # set positions to -1 for now
         key, spawn_key = jax.random.split(key)
-        air = self.spawn(spawn_key, air, jnp.arange(1, params.n_drones + 1, dtype=jnp.int32), exclude_mask=(ground == OBJ_SKYSCRAPER))
+        air_x, air_y = self.spawn_air(spawn_key, air_x, air_y, params, exclude=(ground == OBJ_SKYSCRAPER))
 
         # check if drones picked up package
-        package_mask = (ground == OBJ_PACKET)
-        def check_player(_, player_id):
-            return None, jnp.any((air == player_id) & package_mask)
-        _, carrying_package = jax.lax.scan(check_player, None, jnp.arange(1, params.n_drones + 1, dtype=jnp.int32))
-
-        # compute new positions of drones after respawns
-        drone_y, drone_x = jnp.where(air > 0, size=params.n_drones)
-        drone_ids = air[drone_y, drone_x]
-        sort_idx = jnp.argsort(drone_ids)
-        drone_y = drone_y[sort_idx]
-        drone_x = drone_x[sort_idx]
+        carrying_package = (ground[air_y, air_x] == OBJ_PACKET)
 
         # remove packages that were picked up by respawned drones
         mask = jnp.zeros_like(ground, dtype=jnp.bool)
-        mask = mask.at[drone_y, drone_x].set(carrying_package)
+        mask = mask.at[air_y, air_x].set(carrying_package)
         ground = jnp.where(mask, 0, ground)
         state = DroneEnvState(
-                air=air,
+                air_x=air_x,
+                air_y=air_y,
                 ground=ground,
                 carrying_package=carrying_package,
                 charge=100 * jnp.ones(params.n_drones, dtype=jnp.float32)
@@ -122,31 +136,22 @@ class DeliveryDrones:
             actions: jax.Array,
             params: DroneEnvParams,
              ) -> Tuple[DroneEnvState, jnp.ndarray, jnp.ndarray]:
-        # get current drone positions
-        drone_y, drone_x = jnp.where(state.air > 0, size=params.n_drones)
-        drone_ids = state.air[drone_y, drone_x]
-        sort_idx = jnp.argsort(drone_ids)
-        drone_y = drone_y[sort_idx]
-        drone_x = drone_x[sort_idx]
-        drone_ids = drone_ids[sort_idx]
-
         # compute new position of drones
         dy = jnp.where(actions == ACTION_UP, -1, jnp.where(actions == ACTION_DOWN, 1, 0))
         dx = jnp.where(actions == ACTION_LEFT, -1, jnp.where(actions == ACTION_RIGHT, 1, 0))
-        new_y = drone_y + dy
-        new_x = drone_x + dx
+        new_y = state.air_y + dy
+        new_x = state.air_x + dx
 
         # check off board
-        grid_size = state.air.shape[0]
-        off_board = (new_y < 0) | (new_y >= grid_size) | (new_x < 0) | (new_x >= grid_size)
+        off_board = (new_y < 0) | (new_y >= params.grid_size) | (new_x < 0) | (new_x >= params.grid_size)
 
         # check skyscrapers
-        on_board_y = jnp.clip(new_y, 0, grid_size - 1)
-        on_board_x = jnp.clip(new_x, 0, grid_size - 1)
+        on_board_y = jnp.clip(new_y, 0, params.grid_size - 1)
+        on_board_x = jnp.clip(new_x, 0, params.grid_size - 1)
         collided_skyscrapers = (state.ground[on_board_y, on_board_x] == OBJ_SKYSCRAPER) & ~off_board
 
         # collisions between drones
-        new_pos = jnp.stack([new_y, new_x], axis=-1)
+        new_pos = jnp.stack([new_x, new_y], axis=1)
         unique_positions, inverse_indices, counts = jnp.unique(
                 new_pos,
                 axis=0,
@@ -197,47 +202,38 @@ class DeliveryDrones:
         rewards += params.delivery_reward * delivered
         rewards += params.charge_reward * is_charging
 
-        # actually move suriving drones
-        air = jnp.zeros_like(state.air, dtype=jnp.int32)
-        alive_player_ids = drone_ids * survivors  # only alive player IDs are set
-        air = air.at[new_y, new_x].set(alive_player_ids)
-
         # respawn dead players
-        dead_player_ids = drone_ids * dones  # only dead player IDs are set
+        new_x = jnp.where(dones, -1, new_x)
+        new_y = jnp.where(dones, -1, new_y)
         key, spawn_key = jax.random.split(key)
-        air = self.spawn(
+        new_x, new_y = self.spawn_air(
                 spawn_key,
-                air,
-                dead_player_ids,
-                exclude_mask=(state.ground == OBJ_SKYSCRAPER))
+                new_x,
+                new_y,
+                params,
+                exclude=(state.ground == OBJ_SKYSCRAPER))
 
         # potentially pick up newly spawned packages
+        # def check_player(_, player_id):
+        #     return None, jnp.any((air == player_id) & package_mask)
+        # _, can_pick_up = jax.lax.scan(check_player, None, drone_ids)
         package_mask = (ground == OBJ_PACKET)
-        def check_player(_, player_id):
-            return None, jnp.any((air == player_id) & package_mask)
-        _, can_pick_up = jax.lax.scan(check_player, None, drone_ids)
+        can_pick_up = package_mask[new_x, new_y]
         picked_up = can_pick_up & dones  # all the newly spawned players that can now pick up a package
         carrying_package |= picked_up
 
-        # compute new positions of drones after respawns
-        drone_y, drone_x = jnp.where(air > 0, size=params.n_drones)
-        drone_ids = air[drone_y, drone_x]
-        sort_idx = jnp.argsort(drone_ids)
-        drone_y = drone_y[sort_idx]
-        drone_x = drone_x[sort_idx]
-
         # remove packages that were picked up by respawned drones
         mask = jnp.zeros_like(state.ground, dtype=jnp.bool)
-        mask = mask.at[drone_y, drone_x].set(picked_up)
+        mask = mask.at[new_x, new_y].set(picked_up)
         ground = jnp.where(mask, 0, ground)
 
         # update state
         state = state.replace(
-                air=air,
+                air_x=new_x,
+                air_y=new_y,
                 ground=ground,
                 charge=charge,
                 carrying_package=carrying_package)
-
         return state, rewards, dones
 
 
@@ -275,15 +271,15 @@ if __name__ == "__main__":
     # n_drones = 3
     # grid_size = 370
     # n_drones = 4096
-    # grid_size = 185
-    # n_drones = 1024
-    grid_size = 64
-    n_drones = int(0.03 * (grid_size ** 2))
+    grid_size = 185
+    n_drones = 1024
+    # grid_size = 64
+    # n_drones = int(0.03 * (grid_size ** 2))
 
     drone_density = n_drones / (grid_size ** 2)
     print(f'Num drones: {n_drones}, grid: {grid_size}x{grid_size}, drone density: {drone_density:.2f}')
 
-    params = DroneEnvParams(n_drones=n_drones, drone_density=drone_density)
+    params = DroneEnvParams(n_drones=n_drones, grid_size=grid_size)
     env = DeliveryDrones()
     # params = DroneEnvParams()
     # grid_size = int(jnp.ceil(jnp.sqrt(params.n_drones / params.drone_density)))
@@ -293,7 +289,7 @@ if __name__ == "__main__":
     # jit + fori
     ############
     # # state = env.reset(rng, params, grid_size)
-    # state = jax.jit(env.reset, static_argnums=(1, 2))(rng, params, grid_size)
+    # state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
     # num_steps = 1000
     # print(f'Start running {num_steps:,} steps...')
     # ts = timer()
@@ -306,25 +302,26 @@ if __name__ == "__main__":
     ############
     # jit + vmap
     ############
-    # num_envs = 100
-    # keys = jax.random.split(rng, num_envs)
-    # state = jax.jit(jax.vmap(env.reset, in_axes=[0, None, None]), static_argnums=(1, 2))(keys, params, grid_size)
-    # num_steps = 1000
-    # print(f'Start running {num_steps:,} steps...')
-    # ts = timer()
-    # rng, _ = jax.random.split(rng)
-    # keys = jax.random.split(rng, num_envs)
-    # run_steps_jit = jax.jit(jax.vmap(env.run_steps, in_axes=[0, 0, None, None]), static_argnums=(2, 3))
-    # state, rewards, dones = run_steps_jit(keys, state, params, 100)
-    # rewards.block_until_ready()
-    # te = timer()
-    # print(f'... took {te-ts:.2f}s ({(te-ts)/(num_steps*num_envs):.5f}s/step)')
+    num_envs = 4
+    keys = jax.random.split(rng, num_envs)
+    state = jax.jit(jax.vmap(env.reset, in_axes=[0, None]), static_argnums=(1,))(keys, params)
+    num_steps = 1000
+    print(f'Start running {num_steps:,} steps...')
+    ts = timer()
+    rng, _ = jax.random.split(rng)
+    keys = jax.random.split(rng, num_envs)
+    run_steps_jit = jax.jit(jax.vmap(env.run_steps, in_axes=[0, 0, None, None]), static_argnums=(2, 3))
+    state, rewards, dones = run_steps_jit(keys, state, params, 100)
+    rewards.block_until_ready()
+    te = timer()
+    print(f'... took {te-ts:.2f}s ({(te-ts)/(num_steps*num_envs):.5f}s/step)')
+    __import__('pdb').set_trace()
 
     #######################
     # jit + Python for-loop
     #######################
-    # # state = env.reset(rng, params, grid_size)
-    state = jax.jit(env.reset, static_argnums=(1, 2))(rng, params, grid_size)
+    # state = env.reset(rng, params)
+    state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
     step_jit = jax.jit(env.step, static_argnums=(3,))
     # step_jit = env.step
     repeats = 5
