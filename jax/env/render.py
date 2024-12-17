@@ -1,3 +1,4 @@
+from sys import platlibdir
 from PIL import Image, ImageDraw, ImageFont
 from typing import Optional, Dict, Tuple, Literal
 import subprocess
@@ -8,7 +9,7 @@ import os
 
 
 assets_path = os.path.dirname(os.path.realpath(__file__))
-font_path = os.path.join(assets_path, "assets", "font", "Inconsolata-Bold.ttf")
+font_path = os.path.join(assets_path, "assets", "font", "Press_Start_2P", "PressStart2P-Regular.ttf")
 sprite_path = os.path.join(assets_path, "assets", "16ShipCollection.png")
 
 OBJ_SKYSCRAPER = 2
@@ -23,12 +24,14 @@ class Renderer:
             n_drones: int,
             grid_size: int,
             player_name_mappings: Optional[Dict[int, str]] = None,
-            rgb_render_rescale: float = 1.0):
+            rgb_render_rescale: float = 1.0,
+            image_format: Literal['png', 'jpg'] = 'png'):
         self.n_drones = n_drones
         self.grid_size = grid_size
         self.player_name_mappings = player_name_mappings
         self.rgb_render_rescale = rgb_render_rescale
         self.orientation = self.n_drones * ['right']
+        self.image_format = image_format
 
     def init(self):
         # Load RGBA image
@@ -118,7 +121,7 @@ class Renderer:
         background_color = (20, 200, 200)
         self.panel = Image.new('RGBA', (120, self.empty_frame.shape[1]), color=background_color)
         draw_handle = ImageDraw.Draw(self.panel, mode='RGBA')
-        font = ImageFont.truetype(font_path, 16)
+        font = ImageFont.truetype(font_path, 8)
 
         for drone_idx in range(self.n_drones):
             # Print sprite
@@ -127,20 +130,18 @@ class Renderer:
             sprite_y = drone_idx * self.tiles_size + (drone_idx + 1) * self.render_padding
             self.panel.paste(drone_sprite, (sprite_x, sprite_y), drone_sprite)
 
-            player_name = 'Player {:>2}'.format(drone_idx)
+            player_name = f'Player {drone_idx}'
             if self.player_name_mappings is not None:
                 # Optional setting for rendering videos on AIcrowd evaluator
                 player_name = self.player_name_mappings.get(drone_idx, '')
 
             # # Print text
             text_x = sprite_x + self.tiles_size + self.render_padding
-            text_y = sprite_y - 1
-            text_color = (0, 0, 0)
-            draw_handle.text((text_x, text_y), player_name, fill=text_color, font=font)
+            text_y = sprite_y + 4
+            draw_handle.text((text_x, text_y), player_name, fill='black', font=font)
 
 
-    def render(self, ground: np.ndarray, air: np.ndarray, carrying_package: np.ndarray, charge: np.ndarray, actions: np.ndarray):
-        # Render frame
+    def render_frame(self, ground: np.ndarray, air: np.ndarray, carrying_package: np.ndarray, charge: np.ndarray, actions: np.ndarray):
         frame = Image.fromarray(self.empty_frame.copy())
         for i in range(self.grid_size):
             for j in range(self.grid_size):
@@ -199,6 +200,9 @@ class Renderer:
         frame = frame.resize(size=(rescale(frame.size[0]), rescale(frame.size[1])), resample=Image.NEAREST)
         return frame
 
+    def save_frame(self, img: Image.Image, step: int, output_dir: str):
+        img.save(os.path.join(output_dir, f'{step:04d}.{self.image_format}'))
+
     def make_subprocess_call(self, command: str, shell: bool = False):
         result = subprocess.run(
             command.split(),
@@ -216,10 +220,9 @@ class Renderer:
             output_path: str,
             output_resolution: Tuple[int, int] = (600, 600),
             ffmpeg_exec: str = 'ffmpeg',
-            input_format: Literal['jpg', 'png'] = 'png',
             fps: int = 4):
         # Generate Normal Sized Video
-        frames_path = os.path.join(input_folder_path, f"%04d.{input_format}")
+        frames_path = os.path.join(input_folder_path, f"%04d.{self.image_format}")
         res = f'{output_resolution[0]}x{output_resolution[1]}'
         return_code, output, output_err = self.make_subprocess_call(
             ffmpeg_exec +
@@ -265,11 +268,11 @@ if __name__ == "__main__":
     num_steps = 200
     state = env.reset(rng, params)
     step_jit = jax.jit(env.step, static_argnums=(3,))
-    renderer = Renderer(params.n_drones, params.grid_size, rgb_render_rescale=4)
+    renderer = Renderer(params.n_drones, params.grid_size, rgb_render_rescale=1)
     renderer.init()
 
     # starting state
-    img = renderer.render(*convert_jax_state(state, jnp.array(params.n_drones * [4])))
+    img = renderer.render_frame(*convert_jax_state(state, jnp.array(params.n_drones * [4])))
     img.save(f'output/0000.png')
 
     for step in range(1, num_steps):
@@ -277,11 +280,12 @@ if __name__ == "__main__":
         actions = jax.random.randint(key, (params.n_drones,), 0, 5, dtype=jnp.int32)
         state, rewards, dones = step_jit(rng, state, actions, params)
 
-        img = renderer.render(*convert_jax_state(state, actions))
-        img.save(f'output/{step:04d}.png')
+        img = renderer.render_frame(*convert_jax_state(state, actions))
+        renderer.save_frame(img, step, 'output')
         print('step', step)
         print(env.format_action(*actions), dones, state.carrying_package)
         print('x:', state.air_x, 'y:', state.air_y)
         print(renderer.orientation)
+        __import__('pdb').set_trace()
 
-    renderer.generate_video('output', 'out.mp4', output_resolution=img.size, input_format='png', fps=3)
+    renderer.generate_video('output', 'out.mp4', output_resolution=img.size, fps=3)
