@@ -32,9 +32,11 @@ class Renderer:
         self.rgb_render_rescale = rgb_render_rescale
         self.orientation = self.n_drones * ['right']
         self.image_format = image_format
+        self.is_initialized = False
+        self.font = ImageFont.truetype(font_path, 8)
 
     def init(self):
-        # Load RGBA image
+        # Load RGB image
         sprites_img = Image.open(sprite_path)
         sprites_img_array = np.array(sprites_img)
 
@@ -82,9 +84,7 @@ class Renderer:
 
         # Create drone tiles
         def overlay(img_a, img_b, orientation, offset = 7):
-            # offset_px = {'right': (offset, 0), 'up': (0, offset), 'left': (offset, 0), 'down': (0, offset)}[orientation]
-            # overlay = Image.new('RGBA', [img_a.size[0] + offset_px[0], img_a.size[1] + offset_px[1]])
-            overlay = Image.new('RGBA', [img_a.size[0] + offset, img_a.size[1] + offset])
+            overlay = Image.new('RGB', [img_a.size[0] + offset, img_a.size[1] + offset])
             if orientation == 'right':
                 overlay.paste(img_a, (offset, 0), img_a)  # move package to the right
                 overlay.paste(img_b, (0, 0), img_b)
@@ -114,17 +114,19 @@ class Renderer:
         # Create empty frame
         self.render_padding, self.tiles_size = 10, 16
         frames_size = self.tiles_size * self.grid_size + self.render_padding * (self.grid_size + 1)
-        self.empty_frame = np.full(shape=(frames_size, frames_size, 4), fill_value=0, dtype=np.uint8)
-        self.empty_frame[:, :, 3] = 255  # Remove background transparency
+        self.empty_frame = np.full(shape=(frames_size, frames_size, 3), fill_value=0, dtype=np.uint8)
+        # self.empty_frame[:, :, 3] = 255  # Remove background transparency
 
         # Side panel
-        background_color = (20, 200, 200)
-        self.panel = Image.new('RGBA', (120, self.empty_frame.shape[1]), color=background_color)
-        draw_handle = ImageDraw.Draw(self.panel, mode='RGBA')
-        font = ImageFont.truetype(font_path, 8)
+        background_color = 'lightblue'
+        panel_width = 120
+        max_drones = 6
+        display_num_drones = min(self.n_drones, max_drones)
+        panel_height = display_num_drones * self.tiles_size + (display_num_drones + 1) * self.render_padding
+        self.panel = Image.new('RGB', (panel_width, panel_height), color=background_color)
+        draw_handle = ImageDraw.Draw(self.panel, mode='RGB')
 
-        for drone_idx in range(self.n_drones):
-            # Print sprite
+        for drone_idx in range(display_num_drones):
             drone_sprite = self.tiles['drone_{}_right'.format(drone_idx)]
             sprite_x = self.render_padding
             sprite_y = drone_idx * self.tiles_size + (drone_idx + 1) * self.render_padding
@@ -135,13 +137,41 @@ class Renderer:
                 # Optional setting for rendering videos on AIcrowd evaluator
                 player_name = self.player_name_mappings.get(drone_idx, '')
 
-            # # Print text
+            # Print text
             text_x = sprite_x + self.tiles_size + self.render_padding
             text_y = sprite_y + 4
-            draw_handle.text((text_x, text_y), player_name, fill='black', font=font)
+            draw_handle.text((text_x, text_y), player_name, fill='black', font=self.font)
+
+        # Legend
+        legend_width = 20
+        self.legend = Image.new('RGB', (self.empty_frame.shape[0] + panel_width, legend_width), color=background_color)
+        draw_handle = ImageDraw.Draw(self.legend, mode='RGB')
+        current_space = 2
+        for tile_name, legend_str in zip(['skyscraper', 'station', 'dropzone', 'packet'], ['Skyscraper', 'C. station', 'Dropzone', 'Package']):
+            sprite = self.tiles[tile_name]
+            self.legend.paste(sprite, (current_space, 2), sprite)
+            current_space += 20
+            draw_handle.text((current_space, 7), legend_str, fill='black', font=self.font)
+            current_space += len(legend_str) * 8 + 7
+
+        # Metrics
+        self.metric_panel = Image.new('RGB', (panel_width, self.empty_frame.shape[1] - panel_height), color=background_color)
+
+        # mark as initialized
+        self.is_initialized = True
 
 
-    def render_frame(self, ground: np.ndarray, air: np.ndarray, carrying_package: np.ndarray, charge: np.ndarray, actions: np.ndarray):
+    def render_frame(
+            self,
+            step: int,
+            ground: np.ndarray,
+            air: np.ndarray,
+            carrying_package: np.ndarray,
+            charge: np.ndarray,
+            rewards: np.ndarray,
+            actions: np.ndarray):
+        if not self.is_initialized:
+            raise Exception('Renderer was not yet initialized. Before running this method, first run `renderer.init()`.')
         frame = Image.fromarray(self.empty_frame.copy())
         for i in range(self.grid_size):
             for j in range(self.grid_size):
@@ -167,7 +197,7 @@ class Renderer:
                             tile = self.tiles[f'drone_{air_pos}_{drone_orientation}']
 
                     # draw charging bar
-                    charge_bar = Image.new('RGBA', (10, 2), (0, 0, 0, 0))  # Transparent background
+                    charge_bar = Image.new('RGB', (10, 2), (0, 0, 0))
                     draw = ImageDraw.Draw(charge_bar)
                     charge_level = int(charge[air_pos]) // 10
                     draw.rectangle([(0, 0), (charge_level, 1)], fill='green')
@@ -187,13 +217,20 @@ class Renderer:
                 # Paste tile on frame
                 tile_x = j * self.tiles_size + (j + 1) * self.render_padding
                 tile_y = i * self.tiles_size + (i + 1) * self.render_padding
-                frame.paste(tile, (tile_x, tile_y), mask=tile)
+                # frame.paste(tile, (tile_x, tile_y), mask=tile)
+                frame.paste(tile, (tile_x, tile_y))
 
                 if charge_bar:
-                    frame.paste(charge_bar, (tile_x + 2, tile_y + self.tiles_size + 2), mask=charge_bar)
+                    frame.paste(charge_bar, (tile_x + 2, tile_y + self.tiles_size + 2))
 
+        # generate metric panel
+        metric_panel = copy.copy(self.metric_panel)
+        draw_handle = ImageDraw.Draw(metric_panel, mode='RGB')
+        draw_handle.text((self.render_padding + 2, self.render_padding), f'Step: {step:>6,}', fill='black', font=self.font)
+        draw_handle.text((self.render_padding + 2, self.render_padding * 2 + 5), f'Reward: {rewards[0]:>4.1f}', fill='black', font=self.font)
 
-        frame = Image.fromarray(np.hstack([frame, self.panel]))
+        frame = np.vstack([np.hstack([frame, np.vstack([self.panel, metric_panel])]), self.legend])
+        frame = Image.fromarray(frame)
 
         # Rescale frame
         rescale = lambda old_size: int(old_size * self.rgb_render_rescale)
@@ -237,9 +274,11 @@ class Renderer:
 
 
 
-def convert_jax_state(state, actions) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def convert_jax_state(step, state, actions, rewards) \
+         -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     ground = jax.device_get(state.ground)
     actions = jax.device_get(actions)
+    rewards = jax.device_get(rewards)
     charge = jax.device_get(state.charge)
     air_x = jax.device_get(state.air_x)
     air_y = jax.device_get(state.air_y)
@@ -247,7 +286,7 @@ def convert_jax_state(state, actions) -> Tuple[np.ndarray, np.ndarray, np.ndarra
     air[:] = None
     air[air_y, air_x] = np.arange(air_x.size)
     carrying_package = jax.device_get(state.carrying_package)
-    return ground, air, carrying_package, charge, actions
+    return step, ground, air, carrying_package, charge, rewards, actions
 
 
 if __name__ == "__main__":
@@ -268,11 +307,12 @@ if __name__ == "__main__":
     num_steps = 200
     state = env.reset(rng, params)
     step_jit = jax.jit(env.step, static_argnums=(3,))
-    renderer = Renderer(params.n_drones, params.grid_size, rgb_render_rescale=1)
+    renderer = Renderer(params.n_drones, params.grid_size, rgb_render_rescale=4)
     renderer.init()
 
     # starting state
-    img = renderer.render_frame(*convert_jax_state(state, jnp.array(params.n_drones * [4])))
+    img = renderer.render_frame(*convert_jax_state(
+        0, state, jnp.array(params.n_drones * [4]), jnp.array(params.n_drones * [0.0])))
     img.save(f'output/0000.png')
 
     for step in range(1, num_steps):
@@ -280,12 +320,11 @@ if __name__ == "__main__":
         actions = jax.random.randint(key, (params.n_drones,), 0, 5, dtype=jnp.int32)
         state, rewards, dones = step_jit(rng, state, actions, params)
 
-        img = renderer.render_frame(*convert_jax_state(state, actions))
+        img = renderer.render_frame(*convert_jax_state(step, state, actions, rewards))
         renderer.save_frame(img, step, 'output')
         print('step', step)
         print(env.format_action(*actions), dones, state.carrying_package)
         print('x:', state.air_x, 'y:', state.air_y)
         print(renderer.orientation)
-        __import__('pdb').set_trace()
 
     renderer.generate_video('output', 'out.mp4', output_resolution=img.size, fps=3)
