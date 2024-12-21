@@ -89,7 +89,7 @@ def drone_respawn_behaviour():
     air_x = jnp.array([1, 3], dtype=jnp.int32)
     air_y = jnp.array([3, 3], dtype=jnp.int32)
     ground = jnp.zeros((params.grid_size, params.grid_size), dtype=jnp.int8)
-    ground = ground.at[3, 7].set(OBJ_PACKET)  # drone 1 will respawn here after collision
+    ground = ground.at[2, 6].set(OBJ_PACKET)  # drone 0 will respawn here after collision
     carrying_package = jnp.zeros((params.n_drones,), dtype=jnp.bool)
     charge = jnp.array(params.n_drones * [100], dtype=jnp.int32)
     state = DroneEnvState(air_x=air_x, air_y=air_y, ground=ground, carrying_package=carrying_package, charge=charge)
@@ -105,23 +105,22 @@ def simple_params():
 # TESTS
 #######
 
-@pytest.mark.focus
 def test_reset(simple_params):
     env = DeliveryDrones()
-    rng = jax.random.PRNGKey(1)
+    rng = jax.random.PRNGKey(4)
     state = env.reset(rng, simple_params)
     assert state.air_x.size == simple_params.n_drones
     num_packets = simple_params.packets_factor * simple_params.n_drones
     num_dropzones = simple_params.dropzones_factor * simple_params.n_drones
     num_stations = simple_params.stations_factor * simple_params.n_drones
     num_skyscrapers = simple_params.skyscrapers_factor * simple_params.n_drones
-    assert jnp.sum(state.ground == OBJ_PACKET) == num_packets - 2  # 2 packages have been picked up
+    assert jnp.sum(state.ground == OBJ_PACKET) == num_packets - 1  # 1 package has been picked up
     assert jnp.sum(state.ground == OBJ_STATION) == num_stations
     assert jnp.sum(state.ground == OBJ_SKYSCRAPER) == num_skyscrapers
     assert jnp.sum(state.ground == OBJ_DROPZONE) == num_dropzones
     assert jnp.sum(state.charge) == 100 * simple_params.n_drones
-    assert not state.carrying_package[0]
-    assert state.carrying_package[1]
+    assert state.carrying_package[0]
+    assert not state.carrying_package[1]
     assert not state.carrying_package[2]
 
 
@@ -139,10 +138,11 @@ def test_respawn(drone_respawn_behaviour):
     assert jnp.sum(rewards) == -2  # we don't give a reward for this
 
 
+@pytest.mark.focus
 def test_charge(drone_env_charge):
     state, params = drone_env_charge
     env = DeliveryDrones()
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.PRNGKey(1)
     actions = jnp.array([ACTION_RIGHT, ACTION_RIGHT, ACTION_RIGHT], dtype=jnp.int32)
     state_out, rewards, dones = env.step(rng, state, actions, params)
     assert state_out.charge[0] == max(50 - params.discharge, 0)
@@ -166,8 +166,14 @@ def test_charge(drone_env_charge):
     state_out, rewards, dones = env.step(rng, state_out, actions, params)
     actions = jnp.array([ACTION_RIGHT, ACTION_STAY, ACTION_RIGHT], dtype=jnp.int32)
     assert state_out.charge[0] == max(50 - 4 * params.discharge, 0)
-    assert state_out.charge[1] == min(50 + 3 * params.charge, 100) - params.discharge
-    assert state_out.charge[2] == max(100 - 3 * params.discharge, 0)
+    if dones[1]:
+        assert state_out.charge[1] == 100
+    else:
+        assert state_out.charge[1] == min(50 + 3 * params.charge, 100) - params.discharge
+    if dones[2]:
+        assert state_out.charge[2] == 100
+    else:
+        assert state_out.charge[2] == max(100 - 3 * params.discharge, 0)
 
 
 def test_skyscrapers(drone_env_skyscrapers):
