@@ -59,10 +59,8 @@ class DeliveryDrones:
             ) -> jnp.ndarray:
         p_choice = (grid == 0)
         if exclude_mask:
-            p_choice = (grid == 0 & ~exclude_mask)
-        else:
-            p_choice = (grid == 0)
-        p_choice = p_choice.astype(jnp.float32).ravel()
+            p_choice &= ~exclude_mask
+        p_choice = p_choice.ravel()
         pos = jax.random.choice(key, params.grid_size ** 2, shape=fill_values.shape, p=p_choice, replace=False)
         random_x_pos = pos // params.grid_size
         random_y_pos = pos % params.grid_size
@@ -77,10 +75,10 @@ class DeliveryDrones:
             params: DroneEnvParams,
             exclude: Optional[jnp.ndarray] = None,
             ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        p_choice = jnp.ones((params.grid_size, params.grid_size), dtype=jnp.float32)
-        p_choice = p_choice.at[x_pos, y_pos].set(0)
+        p_choice = jnp.ones((params.grid_size, params.grid_size), dtype=jnp.bool)
+        p_choice = p_choice.at[x_pos, y_pos].set(False)
         if exclude is not None:
-            p_choice = jnp.where(exclude, 0, p_choice)
+            p_choice &= ~exclude
         p_choice = p_choice.ravel()
         pos = jax.random.choice(key, params.grid_size ** 2, shape=(params.n_drones,), p=p_choice, replace=False)
         random_x_pos = pos // params.grid_size
@@ -128,7 +126,7 @@ class DeliveryDrones:
         # remove packages that were picked up by respawned drones
         mask = jnp.zeros_like(ground, dtype=jnp.bool)
         mask = mask.at[air_y, air_x].set(carrying_package)
-        ground = jnp.where(mask, 0, ground)
+        ground *= ~mask
         state = DroneEnvState(
                 air_x=air_x,
                 air_y=air_y,
@@ -188,7 +186,7 @@ class DeliveryDrones:
         surivors_picked_up = (state.ground[new_y, new_x] == OBJ_PACKET) & survivors & ~state.carrying_package  # surivors may pick up packages at new locations
         mask = jnp.zeros_like(state.ground, dtype=jnp.bool)
         mask = mask.at[new_y, new_x].set(surivors_picked_up)
-        ground = jnp.where(mask, 0, state.ground)
+        ground = state.ground * ~mask
         carrying_package = state.carrying_package & survivors  # dead drones lose their packages
         carrying_package |= surivors_picked_up   # add packages that were newly picked up by survivors
 
@@ -233,7 +231,7 @@ class DeliveryDrones:
         # remove packages that were picked up by respawned drones
         mask = jnp.zeros_like(state.ground, dtype=jnp.bool)
         mask = mask.at[new_x, new_y].set(picked_up_after_respawn)
-        ground = jnp.where(mask, 0, ground)
+        ground *= ~mask
 
         # update state
         state = state.replace(
@@ -293,12 +291,43 @@ if __name__ == "__main__":
     # grid_size = int(jnp.ceil(jnp.sqrt(params.n_drones / params.drone_density)))
     rng = jax.random.PRNGKey(0)
 
-    ############
-    # jit + fori
-    ############
+    # #######################
+    # # jit + Python for-loop
+    # #######################
+    # state = env.reset(rng, params)
+    state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
+    step_jit = jax.jit(env.step, static_argnums=(3,))
+    # step_jit = env.step
+    repeats = 5
+    skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
+    num_steps = 100
+    print(f'Running {num_steps:,} steps {repeats} times (skipping {skip} first runs)...')
+    times = []
+    for _ in range(repeats):
+        ts = timer()
+        for i in trange(num_steps):
+            rng, key = jax.random.split(rng)
+            actions = jax.random.randint(key, (params.n_drones,), 0, NUM_ACTIONS, dtype=jnp.int32)
+            state, rewards, dones = step_jit(rng, state, actions, params)
+            # # tracing
+            # state, rewards, dones = step_jit(rng, state, actions, params)
+            # state, rewards, dones = step_jit(rng, state, actions, params)
+            # with jax.profiler.trace("jax-trace-v2"):
+            #     state, rewards, dones = step_jit(rng, state, actions, params)
+            #     rewards.block_until_ready()
+            # __import__('pdb').set_trace()
+        te = timer()
+        times.append(te - ts)
+    mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
+    print(f'... jit+for-loop took {mean:.2f}s (±{std:.3f}) or {1000*mean/num_steps:.4f}s/1k steps (±{1000*std/num_steps:.4f})')
+    __import__('pdb').set_trace()
+
+    # ############
+    # # jit + fori
+    # ############
     # # state = env.reset(rng, params, grid_size)
     # state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
-    # num_steps = 1000
+    # num_steps = 100
     # repeats = 5
     # skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
     # print(f'Start running {num_steps:,} steps {repeats} times...')
@@ -311,10 +340,11 @@ if __name__ == "__main__":
     #     times.append(timer() - ts)
     # mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
     # print(f'... jit+fori took {mean:.2f}s (±{std:.3f}) or {1000*mean/(num_steps):.4f}s/1k steps (±{1000*std/num_steps:.4f})')
+    # __import__('pdb').set_trace()
 
-    ###################
-    # jit + vmap + fori
-    ###################
+    # ##################
+    # # jit + vmap + fori
+    # ##################
     # num_envs = 4
     # keys = jax.random.split(rng, num_envs)
     # state = jax.jit(jax.vmap(env.reset, in_axes=[0, None]), static_argnums=(1,))(keys, params)
@@ -334,36 +364,6 @@ if __name__ == "__main__":
     # mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
     # print(f'... jit+vmap+fori took {mean:.2f}s (±{std:.3f}) or {1000*mean/(num_steps*num_envs):.4f}s/1k steps (±{1000*std/(num_steps * num_envs):.4f})')
     # __import__('pdb').set_trace()
-
-    # # #######################
-    # # # jit + Python for-loop
-    # # #######################
-    # # state = env.reset(rng, params)
-    # state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
-    # step_jit = jax.jit(env.step, static_argnums=(3,))
-    # # step_jit = env.step
-    # repeats = 5
-    # skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
-    # num_steps = 1000
-    # print(f'Running {num_steps:,} steps {repeats} times (skipping {skip} first runs)...')
-    # times = []
-    # for _ in range(repeats):
-    #     ts = timer()
-    #     for i in trange(num_steps):
-    #         rng, key = jax.random.split(rng)
-    #         actions = jax.random.randint(key, (params.n_drones,), 0, NUM_ACTIONS, dtype=jnp.int32)
-    #         state, rewards, dones = step_jit(rng, state, actions, params)
-    #         # # tracing
-    #         # state, rewards, dones = step_jit(rng, state, actions, params)
-    #         # state, rewards, dones = step_jit(rng, state, actions, params)
-    #         # with jax.profiler.trace("jax-trace-v2"):
-    #         #     state, rewards, dones = step_jit(rng, state, actions, params)
-    #         #     rewards.block_until_ready()
-    #         # __import__('pdb').set_trace()
-    #     te = timer()
-    #     times.append(te - ts)
-    # mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
-    # print(f'... jit+for-loop took {mean:.2f}s (±{std:.3f}) or {1000*mean/num_steps:.4f}s/1k steps (±{1000*std/num_steps:.4f})')
 
     ############
     # pmap+vmap+fori
