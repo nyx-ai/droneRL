@@ -2,10 +2,12 @@ from typing import Optional, Tuple, Callable
 import jax
 import jax.numpy as jnp
 import jax.random
+import jax.nn
 from tqdm import trange
 from flax.struct import dataclass
 from timeit import default_timer as timer
 
+# from .constants import Action, Object
 from constants import Action, Object
 
 
@@ -96,7 +98,7 @@ class DeliveryDrones:
         key, spawn_key = jax.random.split(key)
         ground = self.spawn(spawn_key, ground, jnp.ones(num_packets, dtype=jnp.int8) * Object.PACKET.value, params)
         key, spawn_key = jax.random.split(key)
-        ground = self.spawn(spawn_key, ground, jnp.ones(num_dropzones, dtype=jnp.int8) * Object.STATION.value, params)
+        ground = self.spawn(spawn_key, ground, jnp.ones(num_dropzones, dtype=jnp.int8) * Object.DROPZONE.value, params)
         key, spawn_key = jax.random.split(key)
         ground = self.spawn(spawn_key, ground, jnp.ones(num_stations, dtype=jnp.int8) * Object.STATION.value, params)
         key, spawn_key = jax.random.split(key)
@@ -156,7 +158,7 @@ class DeliveryDrones:
         collided = off_board | collided_skyscrapers | collisions
 
         # handle charge
-        is_charging = (state.ground[new_y, new_x] == Object.PACKET) & (~collided) & (state.charge < 100)
+        is_charging = (state.ground[new_y, new_x] == Object.STATION) & (~collided) & (state.charge < 100)
         is_discharging = ~is_charging & (~collided)
         charge = (state.charge + is_charging * params.charge).clip(0, 100)
         charge = (charge - is_discharging * params.discharge).clip(0, 100)
@@ -229,7 +231,6 @@ class DeliveryDrones:
                 carrying_package=carrying_package)
         return state, rewards, dones
 
-
     def run_steps(
             self,
             key: jax.Array,
@@ -252,6 +253,38 @@ class DeliveryDrones:
         _, state, rewards, dones = carry
         return state, rewards, dones
 
+    def get_obs(self, env_state: DroneEnvState, wrapper: str = 'window', radius: int = 3):
+        if wrapper != 'window':
+            # currently only support for wrapper
+            raise NotImplementedError
+        padded = jnp.pad(env_state.ground, radius, mode='constant', constant_values=Object.SKYSCRAPER)  # pad with skyscrapers
+        x_pos, y_pos = env_state.air_x + radius, env_state.air_y + radius
+        padded = padded.at[y_pos, x_pos].add(100)  # required to get drone positions
+        x_indices = x_pos[:, None] + jnp.arange(-radius, radius + 1, dtype=jnp.int32)[None, :]  # (n, 1) + (1, 2r+1) => (n, 2r+1)
+        y_indices = y_pos[:, None] + jnp.arange(-radius, radius + 1, dtype=jnp.int32)[None, :]
+        obs_org = padded[y_indices[:, :, None], x_indices[:, None, :]]  # => (n, 2r+1, 2r+1)
+
+        # re-map some of the classes for one-hot encoding
+        # currently: skyscraper: 2, station: 3, dropzone: 4, packages: 5
+        # new: drone pos: 0, packages: 1, dropzones: 2, station: 3, charge: 4, skyscrapers/wall: 5
+        obj_only = obs_org % 100
+        obj_only = jnp.where(obj_only == Object.PACKET, 1,   # packages -> 1
+                  jnp.where(obj_only == Object.SKYSCRAPER, 5,   # skyscrapers -> 5
+                  jnp.where(obj_only == Object.DROPZONE, 2,   # dropzones -> 2
+                  jnp.where(obj_only == 0, 10,   # empty -> arbitrary value > 6
+                           obj_only))))  # default case
+
+        # generate one-hot encoding
+        obs = jax.nn.one_hot(obj_only, 6, dtype=jnp.bool)
+        obs = obs.at[:, :, :, 0].set(obs_org >= 100)
+
+        # mark package if carrying
+        obs = obs.at[:, radius, radius, 1].set(obs[:, radius, radius, 1] | env_state.carrying_package)
+
+        # mark charge status
+        obs = obs.astype(jnp.float32)
+        obs = obs.at[:, radius, radius, 4].set(env_state.charge / 100.0)
+        return obs
 
     def format_action(self, *actions):
         return [['←', '↓', '→', '↑', 'X'][i] for i in actions]
@@ -262,7 +295,8 @@ if __name__ == "__main__":
     import statistics
     cc.set_cache_dir('./jax_cache')
     import sys; sys.path.append('..')
-    from agents.random import RandomAgent
+    from agents.rand import RandomAgent
+    from agents.dqn import DQNAgent
 
     # grid_size = 8
     # n_drones = 3
@@ -282,6 +316,7 @@ if __name__ == "__main__":
     # grid_size = int(jnp.ceil(jnp.sqrt(params.n_drones / params.drone_density)))
     rng = jax.random.PRNGKey(0)
     agent = RandomAgent()
+    # agent = DQNAgent()
 
     # #######################
     # # jit + Python for-loop
@@ -289,6 +324,7 @@ if __name__ == "__main__":
     # state = env.reset(rng, params)
     state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
     step_jit = jax.jit(env.step, static_argnums=(3,))
+    get_obs_jit = jax.jit(env.get_obs)
     # step_jit = env.step
     repeats = 5
     skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
@@ -300,8 +336,11 @@ if __name__ == "__main__":
         for i in trange(num_steps):
             rng, key = jax.random.split(rng)
             action_keys = jax.random.split(key, params.n_drones)
+            # actions = jax.vmap(agent.act)(action_keys)
             actions = jax.vmap(agent.act)(action_keys)
             state, rewards, dones = step_jit(rng, state, actions, params)
+            obs = get_obs_jit(state)
+            __import__('pdb').set_trace()
 
             # # tracing
             # state, rewards, dones = step_jit(rng, state, actions, params)
