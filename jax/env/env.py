@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Callable
+from typing import Optional, Tuple, Callable, Literal
 import jax
 import jax.numpy as jnp
 import jax.random
@@ -7,8 +7,7 @@ from tqdm import trange
 from flax.struct import dataclass
 from timeit import default_timer as timer
 
-# from .constants import Action, Object
-from constants import Action, Object
+from .constants import Action, Object
 
 
 @dataclass
@@ -26,6 +25,8 @@ class DroneEnvParams:
     stations_factor: int = 2
     skyscrapers_factor: int = 3
     rgb_render_rescale: float = 1.0
+    wrapper: Literal['window', 'compass'] = 'window'
+    window_radius: int = 3
 
 
 @dataclass
@@ -253,10 +254,11 @@ class DeliveryDrones:
         _, state, rewards, dones = carry
         return state, rewards, dones
 
-    def get_obs(self, env_state: DroneEnvState, wrapper: str = 'window', radius: int = 3):
-        if wrapper != 'window':
+    def get_obs(self, env_state: DroneEnvState, params: DroneEnvParams):
+        if params.wrapper != 'window':
             # currently only support for wrapper
             raise NotImplementedError
+        radius = params.window_radius
         padded = jnp.pad(env_state.ground, radius, mode='constant', constant_values=Object.SKYSCRAPER)  # pad with skyscrapers
         x_pos, y_pos = env_state.air_x + radius, env_state.air_y + radius
         padded = padded.at[y_pos, x_pos].add(100)  # required to get drone positions
@@ -340,7 +342,6 @@ if __name__ == "__main__":
             actions = jax.vmap(agent.act)(action_keys)
             state, rewards, dones = step_jit(rng, state, actions, params)
             obs = get_obs_jit(state)
-            __import__('pdb').set_trace()
 
             # # tracing
             # state, rewards, dones = step_jit(rng, state, actions, params)

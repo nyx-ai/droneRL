@@ -242,7 +242,7 @@ def test_get_obs(drone_env_packages):
     state, params = drone_env_packages
     env = DeliveryDrones()
     for radius in [2, 3, 4]:
-        obs = env.get_obs(state, wrapper='window', radius=radius)
+        obs = env.get_obs(state, params)
         assert obs.shape == (1, radius * 2 + 1, radius * 2 + 1, 6)
         assert obs[0, radius, radius, 0] == 1
         assert obs[0, radius, radius + 1, 1] == 1
@@ -254,7 +254,7 @@ def test_get_obs_v2(drone_env_get_obs):
     state, params = drone_env_get_obs
     env = DeliveryDrones()
     radius = 3
-    obs = env.get_obs(state, wrapper='window', radius=radius)
+    obs = env.get_obs(state, params)
     assert obs[0, radius, radius, 0] == 1
     assert obs[0, radius, radius + 2, 0] == 1
     assert obs[0, radius, radius, 1] == 1  # carrying package
