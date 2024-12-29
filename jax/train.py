@@ -46,19 +46,19 @@ def train():
     ag_state = dqn_agent.reset(rng, ag_params, env_params)
 
     # init buffer
-    buffer = ReplayBuffer()
-    exp = {'obs': obs, 'actions': actions[None, 0], 'rewards': rewards[None, 0], 'next_obs': next_obs, 'dones': dones[None, 0]}
-
-    bstate = buffer.init(memory_size, exp)
+    buffer = ReplayBuffer(buffer_size=memory_size, sample_batch_size=batch_size)
+    exp = {'obs': obs, 'actions': actions[0], 'rewards': rewards[0], 'next_obs': next_obs, 'dones': dones[0]}
+    bstate = buffer.init(exp)
 
     # jit functions
+    # do_jit = False
     do_jit = True
     train_step_jit = jax.jit(dqn_agent.train_step, static_argnums=(6,)) if do_jit else dqn_agent.train_step
     step_jit = jax.jit(env.step, static_argnums=(3,)) if do_jit else env.step
     act_jit = jax.jit(dqn_agent.act) if do_jit else dqn_agent.act
     get_obs_jit = jax.jit(env.get_obs, static_argnums=(1,)) if do_jit else env.get_obs
     buffer_add_jit = jax.jit(buffer.add) if do_jit else buffer.add
-    buffer_sample_jit = jax.jit(buffer.sample, static_argnums=(1,)) if do_jit else buffer.sample
+    buffer_sample_jit = jax.jit(buffer.sample) if do_jit else buffer.sample
 
 
     for step in trange(num_steps):
@@ -88,12 +88,13 @@ def train():
         ts = timer()
         exp = {'obs': obs, 'actions': actions[0], 'rewards': rewards[0], 'next_obs': next_obs, 'dones': dones[0]}
         bstate = buffer_add_jit(bstate, exp)
+
         logger.info(f'{1000*(timer()-ts):.2f}ms buffer add')
 
         # train step
-        if bstate.current_size >= batch_size:
+        if buffer.can_sample(bstate):
             ts = timer()
-            batch, key = buffer_sample_jit(key, batch_size, bstate)
+            batch, key = buffer_sample_jit(key, bstate)
             logger.info(f'{1000*(timer()-ts):.2f}ms buffer sample')
             ts = timer()
             ag_state, loss = train_step_jit(
