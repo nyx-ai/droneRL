@@ -5,16 +5,14 @@ import itertools
 import copy
 import numpy as np
 import os
+from collections import deque
+
+from .constants import Object, Action
 
 
 assets_path = os.path.dirname(os.path.realpath(__file__))
 font_path = os.path.join(assets_path, "assets", "font", "Press_Start_2P", "PressStart2P-Regular.ttf")
 sprite_path = os.path.join(assets_path, "assets", "16ShipCollection.png")
-
-OBJ_SKYSCRAPER = 2
-OBJ_STATION = 3
-OBJ_DROPZONE = 4
-OBJ_PACKET = 5
 
 
 class Renderer:
@@ -24,17 +22,24 @@ class Renderer:
             grid_size: int,
             player_name_mappings: Optional[Dict[int, str]] = None,
             rgb_render_rescale: float = 1.0,
+            trace_length: int = 0,
+            trace_drone_ids_only: Tuple[int] = (0,),
             image_format: Literal['png', 'jpg'] = 'png'):
         self.n_drones = n_drones
         self.grid_size = grid_size
         self.player_name_mappings = player_name_mappings
         self.rgb_render_rescale = rgb_render_rescale
-        self.orientation = self.n_drones * ['right']
+        self.orientation = self.n_drones * [Action.RIGHT]
         self.image_format = image_format
         self.is_initialized = False
         self.font = ImageFont.truetype(font_path, 8)
         self.line_spacing = 16
         self.large_line_spacing = 22
+        self.traces = [deque(maxlen=trace_length) for _ in range(n_drones)]
+        self.trace_length = trace_length
+        self.trace_paths = [[None for _ in range(grid_size)] for _ in range(grid_size)]
+        self.trace_drone_ids_only = trace_drone_ids_only
+        self.ship_colors = []
 
     def init(self):
         # Load RGB image
@@ -61,6 +66,8 @@ class Renderer:
             'station': get_ships_tile(18, 15),
             'skyscraper': get_ships_tile(18, 12)
         }
+        self.traces = [deque(maxlen=self.trace_length) for _ in range(self.n_drones)]
+        self.trace_paths = [[None for _ in range(self.grid_size)] for _ in range(self.grid_size)]
 
         # Define list of ships and colors
         ship_types = [(1, 2), (6, 3), (8, 0), (9, 3), (9, 4), (10, 2), (17, 3)]
@@ -86,13 +93,13 @@ class Renderer:
         # Create drone tiles
         def overlay(img_a, img_b, orientation, offset = 7):
             overlay = Image.new('RGB', [img_a.size[0] + offset, img_a.size[1] + offset])
-            if orientation == 'right':
+            if orientation == Action.RIGHT:
                 overlay.paste(img_a, (offset, 0), img_a)  # move package to the right
                 overlay.paste(img_b, (0, 0), img_b)
-            elif orientation == 'down':
+            elif orientation == Action.DOWN:
                 overlay.paste(img_a, (0, offset), img_a)  # move package down
                 overlay.paste(img_b, (0, 0), img_b)
-            elif orientation == 'up':
+            elif orientation == Action.UP:
                 overlay.paste(img_a, (0, 0), img_a)
                 overlay.paste(img_b, (0, offset), img_b)  # move drone down
             else:
@@ -101,10 +108,12 @@ class Renderer:
                 overlay.paste(img_b, (offset, 0), img_b)  # move drone to right
             return overlay
 
+        self.ship_colors = []
         for drone_idx in range(self.n_drones):
             i, j = next(ships_iter)
+            self.ship_colors.append(['blue', 'green', 'red', 'yellow', 'purple'][drone_idx % 5])
             tile = get_ships_tile(i, j)
-            for rot, orientation in zip([0, 90, 180, 270], ['right', 'up', 'left', 'down']):
+            for rot, orientation in zip([0, 90, 180, 270], [Action.RIGHT, Action.UP, Action.LEFT, Action.DOWN]):
                 label = f'drone_{drone_idx}_{orientation}'
                 tile_rot = copy.copy(tile).rotate(rot)  # counter-clock wise
                 self.tiles[label] = tile_rot
@@ -116,7 +125,6 @@ class Renderer:
         self.render_padding, self.tiles_size = 10, 16
         frames_size = self.tiles_size * self.grid_size + self.render_padding * (self.grid_size + 1)
         self.empty_frame = np.full(shape=(frames_size, frames_size, 3), fill_value=0, dtype=np.uint8)
-        # self.empty_frame[:, :, 3] = 255  # Remove background transparency
 
         # Side panel
         background_color = 'lightblue'
@@ -128,7 +136,7 @@ class Renderer:
         draw_handle = ImageDraw.Draw(self.panel, mode='RGB')
 
         for drone_idx in range(display_num_drones):
-            drone_sprite = self.tiles['drone_{}_right'.format(drone_idx)]
+            drone_sprite = self.tiles['drone_{}_{}'.format(drone_idx, Action.RIGHT)]
             sprite_x = self.render_padding
             sprite_y = drone_idx * self.large_line_spacing + self.render_padding
             self.panel.paste(drone_sprite, (sprite_x, sprite_y), drone_sprite)
@@ -182,17 +190,17 @@ class Renderer:
                 has_ground_pos = (ground_pos != 0) and (ground_pos is not None)
                 has_air_pos = air_pos is not None
                 charge_bar = None
-                if not has_air_pos and not has_ground_pos:
-                    continue
-                elif has_air_pos:
-                    drone_orientation = {0: 'left', 1: 'down', 2: 'right', 3: 'up', 4: self.orientation[air_pos]}[actions[air_pos]]
-                    self.orientation[air_pos] = drone_orientation
+                if has_air_pos:
+                    drone_orientation = self.orientation[air_pos]
+                    if actions[air_pos] != Action.STAY:
+                        drone_orientation = actions[air_pos]
+                        self.orientation[air_pos] = drone_orientation
                     if carrying_package[air_pos]:
                         tile = self.tiles[f'drone_{air_pos}_{drone_orientation}_packet']
                     else:
-                        if ground_pos == OBJ_STATION:
+                        if ground_pos == Object.STATION:
                             tile = self.tiles[f'drone_{air_pos}_{drone_orientation}_charging']
-                        elif ground_pos == OBJ_DROPZONE:
+                        elif ground_pos == Object.DROPZONE:
                             tile = self.tiles[f'drone_{air_pos}_{drone_orientation}_dropzone']
                         else:
                             tile = self.tiles[f'drone_{air_pos}_{drone_orientation}']
@@ -202,23 +210,39 @@ class Renderer:
                     draw = ImageDraw.Draw(charge_bar)
                     charge_level = int(charge[air_pos]) // 10
                     draw.rectangle([(0, 0), (charge_level, 1)], fill='green')
-                else:
+                    if self.trace_length > 0:
+                        if len(self.traces[air_pos]) >= self.trace_length:
+                            ri, rj = self.traces[air_pos][0]
+                            self.trace_paths[ri][rj] = None
+                        self.traces[air_pos].append((i, j))
+                        self.trace_paths[i][j] = air_pos
+                elif has_ground_pos:
                     # has_ground_pos
-                    if ground_pos == OBJ_PACKET:
+                    if ground_pos == Object.PACKET:
                         tile = self.tiles['packet']
-                    elif ground_pos == OBJ_DROPZONE:
+                    elif ground_pos == Object.DROPZONE:
                         tile = self.tiles['dropzone']
-                    elif ground_pos == OBJ_STATION:
+                    elif ground_pos == Object.STATION:
                         tile = self.tiles['station']
-                    elif ground_pos == OBJ_SKYSCRAPER:
+                    elif ground_pos == Object.SKYSCRAPER:
                         tile = self.tiles['skyscraper']
                     else:
                         raise ValueError(f'Unexpected ground pos value {ground_pos}')
+                else:
+                    # empty tile
+                    tile = Image.new('RGB', (16, 16), (0, 0, 0))
 
                 # Paste tile on frame
+                draw = ImageDraw.Draw(tile)
+                if self.trace_paths[i][j] is not None and self.trace_paths[i][j] in self.trace_drone_ids_only:
+                    # TODO: this is still to improve
+                    # ship_color = self.ship_colors[self.trace_paths[i][j]]
+                    draw.rectangle((0, 0, 15, 15), outline=(127, 127, 255), width=1)
+                else:
+                    draw.rectangle((0, 0, 15, 15), outline='black', width=1)
+
                 tile_x = j * self.tiles_size + (j + 1) * self.render_padding
                 tile_y = i * self.tiles_size + (i + 1) * self.render_padding
-                # frame.paste(tile, (tile_x, tile_y), mask=tile)
                 frame.paste(tile, (tile_x, tile_y))
 
                 if charge_bar:

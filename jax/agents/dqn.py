@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, Union, Literal
+from typing import Tuple, Dict, Union
 import jax
 import jax.random
 import jax.numpy as jnp
@@ -7,11 +7,8 @@ from flax.core import FrozenDict
 from flax import linen as nn
 import optax
 
-import sys; sys.path.append('..')  # REMOVE ME
-from env import DroneEnvState, DroneEnvParams
-
-
-NUM_ACTIONS = 5
+from env import DroneEnvParams
+from env.constants import Action
 
 
 @dataclass
@@ -47,7 +44,7 @@ class DenseQNetwork(nn.Module):
         for n_features in self.hidden_layers:
             x = nn.Dense(n_features)(x)
             x = nn.relu(x)
-        x = nn.Dense(NUM_ACTIONS)(x)
+        x = nn.Dense(Action.num_actions())(x)
         return x
 
 
@@ -80,7 +77,7 @@ class DQNAgent():
     def act(self, key: jnp.ndarray, obs: jnp.ndarray, ag_state: DQNAgentState, greedy: bool = False):
 
         def _explore():
-            return jax.random.randint(key, shape=(), minval=0, maxval=NUM_ACTIONS)
+            return jax.random.randint(key, shape=(), minval=0, maxval=Action.num_actions())
 
         def _exploit():
             out = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
