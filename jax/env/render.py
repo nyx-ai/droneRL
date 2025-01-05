@@ -1,4 +1,3 @@
-from sys import platlibdir
 from PIL import Image, ImageDraw, ImageFont
 from typing import Optional, Dict, Tuple, Literal
 import subprocess
@@ -271,22 +270,6 @@ class Renderer:
         if return_code != 0:
             raise Exception(output_err)
         return output_path
-
-
-
-def convert_jax_state(step, state, actions, rewards) \
-         -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    ground = jax.device_get(state.ground)
-    actions = jax.device_get(actions)
-    rewards = jax.device_get(rewards)
-    charge = jax.device_get(state.charge)
-    air_x = jax.device_get(state.air_x)
-    air_y = jax.device_get(state.air_y)
-    air = np.zeros_like(ground, dtype=np.object_)
-    air[:] = None
-    air[air_y, air_x] = np.arange(air_x.size)
-    carrying_package = jax.device_get(state.carrying_package)
-    return step, ground, air, carrying_package, charge, rewards, actions
 
 
 if __name__ == "__main__":

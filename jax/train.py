@@ -1,6 +1,7 @@
 import logging
 import jax
 import jax.numpy as jnp
+import jax.lax
 import jax.random
 from tqdm import trange
 from jax.experimental.compilation_cache import compilation_cache as cc
@@ -13,6 +14,8 @@ from env.constants import Action
 from agents.dqn import DQNAgent, DQNAgentParams
 from buffers import ReplayBuffer
 
+from render_util import render_video
+
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)-5.5s] [%(name)-12.12s]: %(message)s')
 logger = logging.getLogger(__name__)
@@ -22,14 +25,15 @@ cc.set_cache_dir('./jax_cache')
 
 def train():
     # params
-    num_steps = 1000
     batch_size = 64
     memory_size = 10_000
     hidden_layers = (32, 32)
     n_drones = 3
-    grid_size = 8
+    grid_size = 10
     # n_drones = 1024
     # grid_size = 185
+    # n_drones = 4096
+    # grid_size = 370
 
     env_params = DroneEnvParams(n_drones=n_drones, grid_size=grid_size)
     ag_params = DQNAgentParams(hidden_layers=hidden_layers)
@@ -57,7 +61,7 @@ def train():
     ##################
     # JAX scan loop
     ##################
-    def _update(carry, step):
+    def _train(carry, step):
         rng, state, obs, ag_state, bstate = carry
 
         rng, key = jax.random.split(rng)
@@ -117,12 +121,46 @@ def train():
 
         return (rng, state, next_obs, ag_state, bstate), None
 
-    # ts = timer()
-    # logger.info('Starting scan...')
-    # init_carry = (rng, state, obs, ag_state, bstate)
-    # final_carry, _ = jax.lax.scan(_update, init_carry, jnp.arange(num_steps))
-    # final_carry[0].block_until_ready()
-    # logger.info(f'... full scan took {timer()-ts:.1f}s/1k steps')
+    num_steps = 1_000
+    num_steps_scan = 1000
+    num_batches = num_steps // num_steps_scan
+    ts = timer()
+    for batch in trange(num_batches, unit='batch'):
+        init_carry = (rng, state, obs, ag_state, bstate)
+        final_carry, _ = jax.lax.scan(_train, init_carry, jnp.arange(num_steps_scan))
+        rng, state, _, ag_state, _ = final_carry
+    logger.info(f'... training {num_steps:,} steps took {timer()-ts:.3f}s...')
+
+    def _eval(carry, step):
+        rng, state, ag_state = carry
+
+        # get obs
+        obs = env.get_obs(state, test_env_params)
+        obs = obs[0].ravel()
+
+        # generate random actions for all drones
+        rng, key = jax.random.split(rng)
+        actions = jax.random.randint(key, (test_env_params.n_drones,), minval=0, maxval=Action.num_actions())
+
+        # run action for DQN agent
+        dqn_action = dqn_agent.act(key, obs, ag_state, greedy=True)
+        actions = actions.at[0].set(dqn_action)
+
+        # perform actions in env
+        state, rewards, dones = env.step(key, state, actions, test_env_params)
+        return (rng, state, ag_state), rewards
+
+    test_env_params = DroneEnvParams(n_drones=3, grid_size=10)
+    num_test_steps = 10_000
+    test_state = env.reset(rng, test_env_params)
+    ts = timer()
+    final_carry, rewards = jax.lax.scan(_eval, (rng, test_state, ag_state), jnp.arange(num_test_steps))
+    rng, _, _ = final_carry
+    mean_reward = jnp.mean(rewards, axis=0)
+    logger.info(f'... eval of {num_test_steps:,} steps took {timer()-ts:.3f}s. Mean reward: {mean_reward}')
+    render_video(test_env_params, ag_state)
+    __import__('pdb').set_trace()
+
 
     ##################
     # Python for-looop

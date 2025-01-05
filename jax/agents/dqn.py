@@ -77,8 +77,7 @@ class DQNAgent():
                 epsilon=jnp.array(ag_params.epsilon_start)
                 )
 
-    def act(self, key: jnp.ndarray, obs: jnp.ndarray, ag_state: DQNAgentState):
-        rand_val = jax.random.uniform(key)
+    def act(self, key: jnp.ndarray, obs: jnp.ndarray, ag_state: DQNAgentState, greedy: bool = False):
 
         def _explore():
             return jax.random.randint(key, shape=(), minval=0, maxval=NUM_ACTIONS)
@@ -87,6 +86,10 @@ class DQNAgent():
             out = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
             return jnp.argmax(out)
 
+        if greedy:
+            return _exploit()
+
+        rand_val = jax.random.uniform(key)
         return jax.lax.cond(rand_val < ag_state.epsilon, _explore, _exploit)
 
     def train_step(
