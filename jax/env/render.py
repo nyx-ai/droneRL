@@ -33,6 +33,8 @@ class Renderer:
         self.image_format = image_format
         self.is_initialized = False
         self.font = ImageFont.truetype(font_path, 8)
+        self.line_spacing = 16
+        self.large_line_spacing = 22
 
     def init(self):
         # Load RGB image
@@ -121,14 +123,14 @@ class Renderer:
         panel_width = 120
         max_drones = 6
         display_num_drones = min(self.n_drones, max_drones)
-        panel_height = display_num_drones * self.tiles_size + (display_num_drones + 1) * self.render_padding
+        panel_height = display_num_drones * self.large_line_spacing + self.render_padding
         self.panel = Image.new('RGB', (panel_width, panel_height), color=background_color)
         draw_handle = ImageDraw.Draw(self.panel, mode='RGB')
 
         for drone_idx in range(display_num_drones):
             drone_sprite = self.tiles['drone_{}_right'.format(drone_idx)]
             sprite_x = self.render_padding
-            sprite_y = drone_idx * self.tiles_size + (drone_idx + 1) * self.render_padding
+            sprite_y = drone_idx * self.large_line_spacing + self.render_padding
             self.panel.paste(drone_sprite, (sprite_x, sprite_y), drone_sprite)
 
             player_name = f'Player {drone_idx}'
@@ -225,8 +227,11 @@ class Renderer:
         # generate metric panel
         metric_panel = copy.copy(self.metric_panel)
         draw_handle = ImageDraw.Draw(metric_panel, mode='RGB')
-        draw_handle.text((self.render_padding + 2, self.render_padding), f'Step: {step:>6,}', fill='black', font=self.font)
-        draw_handle.text((self.render_padding + 2, self.render_padding * 2 + 5), f'Reward: {rewards[0]:>4.1f}', fill='black', font=self.font)
+        number_indent = 6
+        draw_handle.text((self.render_padding + 2, self.render_padding), f'Step: {step:>{number_indent},}', fill='black', font=self.font)
+        draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing), 'Rewards', fill='black', font=self.font)
+        for player_id in range(len(rewards)):
+            draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing * (2 + player_id)), f'P{player_id:}: {rewards[player_id]:>{number_indent + 2}.1f}', fill='black', font=self.font)
 
         frame = np.vstack([np.hstack([frame, np.vstack([self.panel, metric_panel])]), self.legend])
         frame = Image.fromarray(frame)

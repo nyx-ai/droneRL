@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 import shutil
 import os
 import tempfile
@@ -35,6 +35,7 @@ def render_video(
         ag_state: DQNAgentState,
         num_steps: int = 200,
         output_path: str = './out.mp4',
+        temp_dir: Optional[str] = None,
         fps: int = 3,
         seed: int = 0):
     renderer = Renderer(env_params.n_drones, env_params.grid_size, rgb_render_rescale=4)
@@ -47,10 +48,13 @@ def render_video(
     act_jit = jax.jit(dqn_agent.act, static_argnums=(3,))
     get_obs_jit = jax.jit(env.get_obs, static_argnums=(1,))
 
-    # starting state
+    # starting frame
     img = renderer.render_frame(*convert_jax_state(
         0, env_state, jnp.array(env_params.n_drones * [4]), jnp.array(env_params.n_drones * [0.0])))
-    temp_dir = tempfile.mkdtemp()
+
+    if temp_dir is None:
+        temp_dir = tempfile.mkdtemp()
+    os.makedirs(temp_dir, exist_ok=True)
     renderer.save_frame(img, 0, temp_dir)
 
     logger.info('Generating video...')

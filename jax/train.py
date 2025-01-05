@@ -28,10 +28,10 @@ def train():
     batch_size = 64
     memory_size = 10_000
     hidden_layers = (32, 32)
-    n_drones = 3
-    grid_size = 10
-    # n_drones = 1024
-    # grid_size = 185
+    # n_drones = 3
+    # grid_size = 10
+    n_drones = 1024
+    grid_size = 185
     # n_drones = 4096
     # grid_size = 370
 
@@ -121,7 +121,7 @@ def train():
 
         return (rng, state, next_obs, ag_state, bstate), None
 
-    num_steps = 1_000
+    num_steps = 100_000
     num_steps_scan = 1000
     num_batches = num_steps // num_steps_scan
     ts = timer()
@@ -129,6 +129,7 @@ def train():
         init_carry = (rng, state, obs, ag_state, bstate)
         final_carry, _ = jax.lax.scan(_train, init_carry, jnp.arange(num_steps_scan))
         rng, state, _, ag_state, _ = final_carry
+    rng.block_until_ready()
     logger.info(f'... training {num_steps:,} steps took {timer()-ts:.3f}s...')
 
     def _eval(carry, step):
@@ -158,6 +159,7 @@ def train():
     rng, _, _ = final_carry
     mean_reward = jnp.mean(rewards, axis=0)
     logger.info(f'... eval of {num_test_steps:,} steps took {timer()-ts:.3f}s. Mean reward: {mean_reward}')
+
     render_video(test_env_params, ag_state)
     __import__('pdb').set_trace()
 
