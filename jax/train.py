@@ -22,18 +22,28 @@ logger = logging.getLogger(__name__)
 
 cc.set_cache_dir('./jax_cache')
 
+def stats(mylist, factor: float = 1000.0):
+    return factor * statistics.mean(mylist), factor * statistics.stdev(mylist)
 
 def train():
     # params
     batch_size = 64
     memory_size = 10_000
     hidden_layers = (32, 32)
-    n_drones = 3
-    grid_size = 10
+    # n_drones = 3
+    # grid_size = 10
     # n_drones = 1024
     # grid_size = 185
     # n_drones = 4096
     # grid_size = 370
+
+    # Florian's benchmark
+    # n_drones = 32
+    # grid_size = 26
+    # n_drones = 512
+    # grid_size = 102
+    n_drones = 2048
+    grid_size = 203
 
     env_params = DroneEnvParams(n_drones=n_drones, grid_size=grid_size)
     ag_params = DQNAgentParams(hidden_layers=hidden_layers)
@@ -61,6 +71,7 @@ def train():
     ##################
     # JAX scan loop
     ##################
+    @jax.jit
     def _train(carry, step):
         rng, state, obs, ag_state, bstate = carry
 
@@ -121,16 +132,23 @@ def train():
 
         return (rng, state, next_obs, ag_state, bstate), loss
 
+    num_repeats = 3
+    skip_first = 1
     num_steps = 1000
     num_steps_scan = 1000
     num_batches = num_steps // num_steps_scan
-    ts = timer()
-    for batch in trange(num_batches, unit='batch'):
-        init_carry = (rng, state, obs, ag_state, bstate)
-        final_carry, loss = jax.lax.scan(_train, init_carry, jnp.arange(num_steps_scan))
-        rng, state, _, ag_state, _ = final_carry
-    rng.block_until_ready()
-    logger.info(f'... training {num_steps:,} steps took {timer()-ts:.3f}s...')
+    timings = []
+    for _ in trange(num_repeats):
+        ts = timer()
+        for batch in trange(num_batches, unit='batch'):
+            init_carry = (rng, state, obs, ag_state, bstate)
+            final_carry, loss = jax.lax.scan(_train, init_carry, jnp.arange(num_steps_scan))
+            rng, state, _, ag_state, _ = final_carry
+        rng.block_until_ready()
+        timings.append(timer() - ts)
+    step_mean, step_stdev = stats(timings[skip_first:], factor=1000.0/num_steps)
+    logger.info(f'Scan training took {step_mean:.3f} ± {step_stdev:>6.3f} s/k steps')
+    __import__('pdb').set_trace()
 
     def _eval(carry, step):
         rng, state, ag_state = carry
@@ -253,14 +271,12 @@ def train():
         if do_timing and step > skip_timing:
             step_timing.append(timer() - ts_all)
 
-    def _stat(mylist, factor=1000):
-        return factor * statistics.mean(mylist), factor * statistics.stdev(mylist)
-    step_mean, step_stdev = _stat(step_timing)
-    stats = {k: _stat(v) for k, v in timing.items()}
-    max_key_length = max(len(k) for k in stats.keys())
+    step_mean, step_stdev = stats(step_timing)
+    all_stats = {k: stats(v) for k, v in timing.items()}
+    max_key_length = max(len(k) for k in all_stats.keys())
     spacing = 9 * ' '
     stats_str = f'\nFull step{spacing} {step_mean:.3f} ± {step_stdev:>6.3f} s/k steps\n'
-    for k, (mean, std) in stats.items():
+    for k, (mean, std) in all_stats.items():
         stats_str += f'  - {k:<{max_key_length}} {mean:.3f} ± {std:>6.3f} s/k steps ({100*mean/step_mean:>5.2f}%)\n'
     logger.info(stats_str)
     __import__('pdb').set_trace()
