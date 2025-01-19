@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from gym import Env
 
-assets_path = os.path.dirname(os.path.realpath(__file__))
+assets_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 font_path = os.path.join(assets_path, "assets", "font", "Inconsolata-Bold.ttf")
 sprite_path = os.path.join(assets_path, "assets", "16ShipCollection.png")
 
@@ -78,8 +78,11 @@ class Grid:
         return idxs
 
     def is_inside(self, position):
-        """Use NumPy to quickly check if a position is inside the grid bounds."""
-        return np.all(np.array(position) >= 0) and np.all(np.array(position) < np.array(self.shape))
+        try:
+            np.ravel_multi_index(multi_index=position, dims=self.shape, mode='raise')
+            return True
+        except ValueError:
+            return False
 
 
 class DeliveryDrones(Env):

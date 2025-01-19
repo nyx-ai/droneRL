@@ -1,105 +1,115 @@
-import os
-import statistics
 import time
 import numpy as np
+from dataclasses import dataclass
+from tqdm import tqdm
+from tabulate import tabulate
 
-NUMBER_OF_RUNS = 5
-
-
-def time_function(function, *args, **kwargs):
-    times = []
-    for _ in range(NUMBER_OF_RUNS):
-        start_time = time.time()
-        function(*args, **kwargs)
-        end_time = time.time()
-        times.append(end_time - start_time)
-
-    mean_time = np.mean(times)
-    min_time = np.min(times)
-    max_time = np.max(times)
-    std_dev = np.std(times)
-
-    result = {
-        "Mean Time": f"{mean_time:.4f} seconds",
-        "Min Time": f"{min_time:.4f} seconds",
-        "Max Time": f"{max_time:.4f} seconds",
-        "Standard Deviation": f"{std_dev:.4f} seconds"
-    }
-
-    return result
+from env.v1.env import DeliveryDrones as DeliveryDronesV1
+from env.v1.wrappers import WindowedGridView as WindowedGridViewV1
+from env.v2.env import DeliveryDrones as DeliveryDronesV2
+from env.v2.wrappers import WindowedGridView as WindowedGridViewV2
+from env.v3.env import DeliveryDrones as DeliveryDronesV3
+from env.v3.wrappers import WindowedGridView as WindowedGridViewV3
 
 
-# ------------------------------
-# Original version (f17edd7f0f2e5c3e4bae95c886dd476e3cdaf78f)
-# Mean Time: 3.3069 seconds
-# Min Time: 3.2401 seconds
-# Max Time: 3.3337 seconds
-# Standard Deviation: 0.0343 seconds
-# ------------------------------
+@dataclass
+class Impl:
+    name: str
+    env: object
+    desc: str
 
-from env.env import DeliveryDrones
-from env.wrappers import WindowedGridView
-from agents.random import RandomAgent
-from agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
-from helpers.rl_helpers import MultiAgentTrainer, plot_rolling_rewards
-from helpers.rl_helpers import test_agents, plot_cumulative_rewards
 
-testing_env = WindowedGridView(DeliveryDrones(), radius=3)
-testing_env.env_params.update({
-    'n_drones': 3,
-    'charge_reward': -0.1,
-    'crash_reward': -1,
-    'pickup_reward': 0,
-    'delivery_reward': 1,
-    'charge': 20,
-    'discharge': 10,
-    'drone_density': 0.05,
-    'dropzones_factor': 2,
-    'packets_factor': 3,
-    'skyscrapers_factor': 3,
-    'stations_factor': 2
-})
+@dataclass
+class Config:
+    name: str
+    params: dict
 
-training_env = WindowedGridView(DeliveryDrones(), radius=3)
-training_env.env_params.update({
-    'n_drones': 3,
-    'charge_reward': -0.1,
-    'crash_reward': -1,
-    'pickup_reward': 0.1,
-    'delivery_reward': 1,
-    'charge': 20,
-    'discharge': 10,
-    'drone_density': 0.05,
-    'dropzones_factor': 2,
-    'packets_factor': 3,
-    'skyscrapers_factor': 3,
-    'stations_factor': 2
-})
-training_env.reset()
-print(training_env.render(mode='ansi'))
-agents = {drone.index: RandomAgent(training_env) for drone in training_env.drones}
-agents[0] = DQNAgent(
-    env=training_env,
-    dqn_factory=DenseQNetworkFactory(training_env, hidden_layers=[32] * 2),
-    # dqn_factory=ConvQNetworkFactory(
-    #     training_env,
-    #     conv_layers=[{'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}],
-    #     dense_layers=[64] * 4
-    # ),
-    gamma=0.95,
-    epsilon_start=1.0,
-    epsilon_decay=0.999,
-    epsilon_end=0.01,
-    memory_size=10000,
-    batch_size=64,
-    target_update_interval=5
-)
-trainer = MultiAgentTrainer(training_env, agents, reset_agents=True, seed=0)
 
-timing_results = time_function(trainer.train, 1500)
-for key, value in timing_results.items():
-    print(f"{key}: {value}")
-rewards_log = test_agents(testing_env, agents, n_steps=10_000, seed=0)
-print({k: statistics.mean(v) for k, v in rewards_log.items()})
-path = os.path.join('output', 'agents', f'benchmark-agent.pt')
-agents[0].save(path)
+# CONFIG #
+n_steps = 50
+# drone_counts = [2048]
+drone_counts = [32, 128, 512, 2048, 2048*4]
+
+configs = [
+    Config(
+        name="DronesOnly",
+        params={'packets_factor': 0, 'dropzones_factor': 0, 'stations_factor': 0, 'skyscrapers_factor': 0}
+    ),
+    Config(
+        name="Default",
+        params={}
+    ),
+    Config(
+        name="HighDensity",
+        params={'packets_factor': 4, 'dropzones_factor': 4, 'stations_factor': 4, 'skyscrapers_factor': 4}
+    ),
+]
+
+impls = [
+    Impl(
+        name="v1",
+        env=WindowedGridViewV1(DeliveryDronesV1(), radius=3),
+        desc="original 2020 version"
+    ),
+    Impl(
+        name="v2",
+        env=WindowedGridViewV2(DeliveryDronesV2(), radius=3),
+        desc="2020 grid-based version using constants instead of objects for what's on the map"
+    ),
+    Impl(
+        name="v3",
+        env=WindowedGridViewV3(DeliveryDronesV3(), radius=3),
+        # env=DeliveryDronesV3(),
+        desc="dict-based version"
+    ),
+]
+# CONFIG #
+
+results = []
+reference_speeds = {}
+
+
+def benchmark_implementation(imp, config, n_drones, n_steps):
+    # Update config with the number of drones for this run
+    config_params = {**config.params, 'n_drones': n_drones}
+    imp.env.env_params.update(config_params)
+    imp.env.reset()
+    # print(imp.env.render(mode='ansi'))
+    start_time = time.perf_counter()
+
+    for _ in tqdm(range(n_steps), desc=f"{imp.name} {config.name} {n_drones} drones", leave=True):
+        actions = {drone.index: imp.env.action_space.sample() for drone in imp.env.drones}
+        imp.env.step(actions)
+        # print(imp.env.render(mode='ansi'))
+
+    total_time = time.perf_counter() - start_time
+    mean_time = (total_time / n_steps) * 1000  # Convert to ms per step and scale for per 1000 steps
+    sps = n_steps / total_time
+
+    # Identify reference time for comparison
+    key = (config.name, n_drones)
+    if imp.name == "v1":
+        reference_speeds[key] = mean_time
+    percent_diff = (reference_speeds[key] / mean_time) if key in reference_speeds else 0
+
+    results.append([
+        imp.name, config.name, n_drones, f"{imp.env.side_size}x{imp.env.side_size}", f"{mean_time:.1f} spKs",
+        f"{sps:.1f} sps", f"{percent_diff:.2f}"
+    ])
+
+
+if __name__ == '__main__':
+    for imp in impls:
+        for config in configs:
+            for n_drones in drone_counts:
+                benchmark_implementation(imp, config, n_drones, n_steps)
+
+    # Print results as a table
+    print(
+        tabulate(results, headers=['Implementation', 'Config', 'Drones', "Size", 'Speed', 'Speed', 'Speedup from V1'])
+    )
+    print("=" * 15)
+    for imp in impls:
+        print(f"{imp.name}: {imp.desc}")
+    print("=" * 15)
+    print(f"{n_steps:,} steps per run.")

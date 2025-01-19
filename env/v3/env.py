@@ -1,0 +1,235 @@
+import itertools
+import os
+import random
+from collections import defaultdict
+
+import gym.spaces as spaces
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+from gym import Env
+
+NUM_ACTIONS = 5
+
+
+class Drone():
+    def __init__(self, index):
+        self.index = index
+        self.packet = False
+        self.charge = 100
+
+    def __repr__(self):
+        return 'D{}'.format(self.index)
+
+
+class DeliveryDrones(Env):
+    metadata = {
+        'render.modes': ['ansi']
+    }
+
+    def __init__(self, env_params={}):
+        self._drones = None
+        self._stations = None
+        self._dropzones = None
+        self._packets = None
+        self._skyscrapers = None
+        self.env_params = {
+            'drone_density': 0.05,
+            'n_drones': 3,
+            'pickup_reward': 0,
+            'delivery_reward': 1,
+            'crash_reward': -1,
+            'charge_reward': -0.1,
+            'discharge': 10,
+            'charge': 20,
+            'packets_factor': 3,
+            'dropzones_factor': 2,
+            'stations_factor': 2,
+            'skyscrapers_factor': 3,
+            'rgb_render_rescale': 1.0
+        }
+        self.env_params.update(env_params)
+        self.action_space = spaces.Discrete(NUM_ACTIONS)
+        self.reset_items()
+
+    @property
+    def drones(self):
+        return list(self._drones.values())
+
+    def reset_items(self):
+        self._drones = {}
+        self._stations = {}
+        self._dropzones = {}
+        self._packets = {}
+        self._skyscrapers = {}
+
+    def spawn_objects(self, available_pos, num_obj, obj=True):
+        positions_dict = {}
+        positions = random.sample(available_pos, num_obj)
+        for i in range(num_obj):
+            position = positions.pop()
+            positions_dict[position] = obj
+            available_pos.remove(position)
+        return positions_dict, available_pos
+
+    def reset(self, seed=0):
+        # print("Resetting env...")
+        self.reset_items()
+
+        self.side_size = int(np.ceil(np.sqrt(self.env_params['n_drones'] / self.env_params['drone_density'])))
+        self.shape = (self.side_size, self.side_size)
+
+        # Create elements of the grid
+        num_drones = self.env_params['n_drones']
+        num_skyscrapers = self.env_params['skyscrapers_factor'] * self.env_params['n_drones']
+        num_packets = self.env_params['packets_factor'] * self.env_params['n_drones']
+        num_dropzone = self.env_params['dropzones_factor'] * self.env_params['n_drones']
+        num_stations = self.env_params['stations_factor'] * self.env_params['n_drones']
+        available_positions = set((x, y) for x in range(self.side_size) for y in range(self.side_size))
+        self._skyscrapers, available_positions = self.spawn_objects(available_positions, num_skyscrapers)
+
+        # add the drones, which don't remove their positions from available_positions
+        for i, p in enumerate(random.sample(available_positions, num_drones)):
+            self._drones[p] = Drone(i)
+
+        self._packets, available_positions = self.spawn_objects(available_positions, num_packets)
+        self._dropzones, available_positions = self.spawn_objects(available_positions, num_dropzone)
+        self._stations, available_positions = self.spawn_objects(available_positions, num_stations)
+
+        # TODO Check if drone immediately picked up packets
+        # self._pick_packets_after_respawn()
+
+        return self._get_state(), None
+
+    def _get_state(self):
+        return {
+            'drones': self._drones,
+            # TODO
+        }
+
+    def step(self, actions):
+        info = {}
+        rewards = {index: 0 for index in actions.keys()}
+        dones = {index: False for index in actions.keys()}
+
+        new_drones = {}
+        crashed_drones = []
+        crashed_drone_locations = []
+        nb_dropzones_to_respawn = 0
+        nb_packets_to_respawn = 0
+        for position, drone in list(self._drones.items()):
+            del self._drones[position]
+            move = [(0, 0), (0, 1), (0, -1), (1, 0), (-1, 0)][actions[drone.index]]
+            new_position = (position[0] + move[0], position[1] + move[1])
+
+            if 0 <= new_position[0] < self.side_size and 0 <= new_position[1] < self.side_size:
+                if new_position in new_drones:
+                    # crashed into another drone
+                    crashed_drones.append(drone)
+                    crashed_drones.append(new_drones[new_position])
+                    # crashed_drone_locations.append(new_position)
+                    del new_drones[new_position]
+                else:
+                    # moved successfully
+                    new_drones[new_position] = drone
+            else:
+                # crashed! out of env bounds
+                crashed_drones.append(drone)
+
+        # handle drones that didn't crash yet
+        for position, drone in list(new_drones.items()):
+            if drone not in crashed_drones:
+                # charging/discharging
+                if position in self._stations:
+                    drone.charge = min(100, drone.charge + self.env_params['charge'])
+                    rewards[drone.index] = self.env_params['charge_reward']
+                else:
+                    drone.charge -= self.env_params['discharge']
+                    if drone.charge <= 0:
+                        crashed_drones.append(drone)
+                        crashed_drone_locations.append(position)
+
+                # pickup/delivery
+                if position in self._packets and drone.packet is False:
+                    # print(f"PICKUP from drone {drone}!!")
+                    rewards[drone.index] = self.env_params['pickup_reward']
+                    drone.packet = True
+                    del self._packets[position]
+                elif position in self._dropzones and drone.packet is True:
+                    # print(f"DELIVERY from drone {drone}!!")
+                    rewards[drone.index] = self.env_params['delivery_reward']
+                    drone.packet = False
+                    del self._dropzones[position]
+                    nb_dropzones_to_respawn += 1
+                    nb_packets_to_respawn += 1
+
+        # clean up locations where crashes occurred
+        for crashed_drone_location in crashed_drone_locations:
+            if crashed_drone_location in new_drones:
+                del new_drones[crashed_drone_location]
+
+        self._drones = new_drones
+
+        for crashed_drone in crashed_drones:
+            crashed_drone.charge = 100
+            if crashed_drone.packet:
+                nb_packets_to_respawn += 1
+                crashed_drone.packet = False
+            rewards[crashed_drone.index] = self.env_params['crash_reward']
+            dones[crashed_drone.index] = True
+            self._drones[self._find_respawn_position(self._drones | self._skyscrapers)] = crashed_drone
+
+        # respawn packets and dropzones
+        for _ in range(nb_packets_to_respawn):
+            ground_mask = self._skyscrapers | self._packets | self._dropzones | self._stations
+            self._packets[self._find_respawn_position(ground_mask)] = True
+        for _ in range(nb_dropzones_to_respawn):
+            ground_mask = self._skyscrapers | self._packets | self._dropzones | self._stations
+            self._dropzones[self._find_respawn_position(ground_mask)] = True
+
+        print()
+        # print("_skyscrapers", len(self._skyscrapers))
+        # print("_dropzones", len(self._dropzones))
+        # print("_stations", len(self._stations))
+        print("_drones", len(self._drones))
+
+        return self._get_state(), rewards, dones, None, info
+
+    def _find_respawn_position(self, mask={}):
+        while True:
+            p = (
+                random.randint(0, self.side_size - 1),
+                random.randint(0, self.side_size - 1)
+            )
+            if p not in mask:
+                return p
+
+    # def _find_respawn_position(self, mask={}):
+    #     available_positions = set((x, y) for x in range(self.side_size) for y in range(self.side_size) if (x, y) not in mask)
+    #     return random.choice(list(available_positions))
+
+    def render(self, mode='ansi'):
+        return self.__str__()
+
+    def __str__(self):
+        lines = ["_" * self.shape[0] * 2]
+        for y in range(self.shape[0]):
+            line_str = ''
+            for x in range(self.shape[1]):
+                position = (y, x)
+                if position in self._drones:
+                    drone = self._drones[position]
+                    tile_char = f'{drone.index}'
+                elif position in self._packets:
+                    tile_char = 'x'
+                elif position in self._dropzones:
+                    tile_char = 'D'
+                elif position in self._stations:
+                    tile_char = '@'
+                elif position in self._skyscrapers:
+                    tile_char = '#'
+                else:
+                    tile_char = '.'
+                line_str += tile_char.ljust(2)
+            lines.append(line_str)
+        lines.append("_" * self.shape[0] * 2)
+        return '\n'.join(lines)

@@ -3,7 +3,7 @@ from collections import OrderedDict
 import gym.spaces as spaces
 import numpy as np
 from gym import ObservationWrapper
-from env.env import OBJ_DRONE, OBJ_SKYSCRAPER, OBJ_STATION, OBJ_DROPZONE, OBJ_PACKET
+from .env import Drone, Packet, Dropzone, DeliveryDrones, Skyscraper, Station
 
 
 class CompassQTable(ObservationWrapper):
@@ -23,12 +23,12 @@ class CompassQTable(ObservationWrapper):
         # Return state for each drone
         return {
             drone.index: self.get_drone_state(drone, *position)
-            for drone, position in self.env.air.get_objects(Drone.get_id(), zip_results=True)
+            for drone, position in self.env.air.get_objects(Drone, zip_results=True)
         }
 
     def get_drone_state(self, drone, drone_y, drone_x):
         # Target direction: nearest packet or dropzone
-        targets, positions = self.env.ground.get_objects(Packet.get_id() if drone.packet is None else Dropzone.get_id())
+        targets, positions = self.env.ground.get_objects(Packet if drone.packet is None else Dropzone)
         l1_distances = np.abs(positions[0] - drone_y) + np.abs(positions[1] - drone_x)
         target_idx = l1_distances.argmin()
 
@@ -76,7 +76,7 @@ class CompassChargeQTable(CompassQTable):
         target_dir = super().get_drone_state(drone, drone_y, drone_x)
 
         # Get direction to nearest charging station
-        stations, positions = self.env.ground.get_objects(Station.get_id())
+        stations, positions = self.env.ground.get_objects(Station)
         l1_distances = np.abs(positions[0] - drone_y) + np.abs(positions[1] - drone_x)
         if l1_distances.min() == 0:
             station_dir = self.cardinals.index('X')
@@ -180,7 +180,7 @@ class LidarCompassChargeQTable(LidarCompassQTable):
         lidar_target = super().get_drone_state(drone, drone_y, drone_x)
 
         # Get direction to nearest charging station
-        _, positions = self.env.ground.get_objects(Station.get_id())
+        stations, positions = self.env.ground.get_objects(Station)
         l1_distances = np.abs(positions[0] - drone_y) + np.abs(positions[1] - drone_x)
         if l1_distances.min() == 0:
             station_dir = self.cardinals.index('X')
@@ -235,28 +235,25 @@ class WindowedGridView(ObservationWrapper):
         states = {}
 
         # Drones (and their packets) + charge
-        for _, (y, x) in self.env.air.get_objects(OBJ_DRONE, zip_results=True):
-            drone = self.drone_data[(y, x)]
+        for drone, (y, x) in self.env.air.get_objects(Drone, zip_results=True):
             grid[y, x, 0] = 1
-
-            # if drone.packet is not None:
             if drone.packet is not None:
                 grid[y, x, 1] = 1
             grid[y, x, 4] = drone.charge / 100
 
         # Packets
-        for packet, (y, x) in self.env.ground.get_objects(OBJ_PACKET, zip_results=True):
+        for packet, (y, x) in self.env.ground.get_objects(Packet, zip_results=True):
             grid[y, x, 1] = 1
 
         # Dropzones
-        for dropzone, (y, x) in self.env.ground.get_objects(OBJ_DROPZONE, zip_results=True):
+        for dropzone, (y, x) in self.env.ground.get_objects(Dropzone, zip_results=True):
             grid[y, x, 2] = 1
 
         # Stations
-        grid[self.env.ground.get_objects(OBJ_STATION)[1] + (3,)] = 1
+        grid[self.env.ground.get_objects(Station)[1] + (3,)] = 1
 
         # Obstacles
-        for skyscraper, (y, x) in self.env.ground.get_objects(OBJ_SKYSCRAPER, zip_results=True):
+        for skyscraper, (y, x) in self.env.ground.get_objects(Skyscraper, zip_results=True):
             grid[y, x, 5] = 1
 
         # Pad
@@ -266,10 +263,8 @@ class WindowedGridView(ObservationWrapper):
         padded_grid[self.radius:-self.radius, self.radius:-self.radius, :] = grid
 
         # Return windowed state for each drone
-        for _, (y, x) in self.env.air.get_objects(OBJ_DRONE, zip_results=True):
-            drone = self.drone_data[(y, x)]
+        for drone, (y, x) in self.env.air.get_objects(Drone, zip_results=True):
             states[drone.index] = padded_grid[y:y + 2 * self.radius + 1, x:x + 2 * self.radius + 1, :].copy()
-
         return states
 
     def format_state(self, s):

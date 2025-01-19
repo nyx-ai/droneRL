@@ -54,7 +54,9 @@ class MultiAgentTrainer:
             actions = {key: agent.act(states[key]) for key, agent in self.agents.items()}
 
             # Perform the selected action
-            next_states, rewards, dones, info, _ = self.env.step(actions)
+            self.step = self.env.step(actions)
+            next_states, rewards, dones, info, _ = self.step
+            # print(self.env.render())
 
             # Learn from experience
             for key, agent in self.agents.items():

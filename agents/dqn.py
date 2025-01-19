@@ -197,6 +197,8 @@ class DQNAgent():
         self.is_greedy = False  # Does the agent behave greedily?
         self.logger = logger or NoLogger()
 
+        self.reset()
+
     def get_hyperparameters(self):
         hyperparams = {
             'gamma': self.gamma,
