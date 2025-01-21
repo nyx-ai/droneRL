@@ -238,10 +238,12 @@ def test_single_movements(single_drone_env):
         assert state_out.air_y == jnp.array([y], dtype=jnp.int32)
 
 
+@pytest.mark.focus
 def test_get_obs(drone_env_packages):
     state, params = drone_env_packages
     env = DeliveryDrones()
     for radius in [2, 3, 4]:
+        params = params.replace(window_radius=radius)
         obs = env.get_obs(state, params)
         assert obs.shape == (1, radius * 2 + 1, radius * 2 + 1, 6)
         assert obs[0, radius, radius, 0] == 1
@@ -249,7 +251,6 @@ def test_get_obs(drone_env_packages):
         assert obs[0, radius, radius + 2, 2] == 1
 
 
-@pytest.mark.focus
 def test_get_obs_v2(drone_env_get_obs):
     state, params = drone_env_get_obs
     env = DeliveryDrones()
