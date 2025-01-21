@@ -21,7 +21,6 @@ class DQNAgentParams:
     epsilon_end: float = 0.01
     learning_rate: float = 1e-3
     target_update_interval: int = 5       # interval for updating target network
-    memory_size: int = 10_000             # memory buffer size
     tau: float = 1.0                      # EMA decay rate / smoothing coef for target network
 
 
