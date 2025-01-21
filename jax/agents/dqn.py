@@ -7,7 +7,7 @@ from flax.core import FrozenDict
 from flax import linen as nn
 import optax
 
-from env import DroneEnvParams
+from env.env import DroneEnvParams
 from env.constants import Action
 
 

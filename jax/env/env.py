@@ -39,6 +39,7 @@ class DroneEnvState:
 
 
 class DeliveryDrones:
+
     def spawn(
             self,
             key: jnp.ndarray,
@@ -51,7 +52,17 @@ class DeliveryDrones:
         if exclude_mask:
             p_choice &= ~exclude_mask
         p_choice = p_choice.ravel()
-        pos = jax.random.choice(key, params.grid_size ** 2, shape=fill_values.shape, p=p_choice, replace=False)
+
+        # old method
+        # pos = jax.random.choice(key, params.grid_size ** 2, shape=fill_values.shape, p=p_choice, replace=False)
+
+        # new method
+        # noise = jax.random.gumbel(key, shape=(params.grid_size ** 2,))
+        noise = jax.random.uniform(key, shape=(params.grid_size ** 2,))
+        scores = jnp.log(p_choice) + noise
+        # _, pos = jax.lax.top_k(scores, k=fill_values.shape[0])
+        _, pos = jax.lax.approx_max_k(scores, fill_values.shape[0])
+
         random_x_pos = pos // params.grid_size
         random_y_pos = pos % params.grid_size
         grid = grid.at[random_x_pos, random_y_pos].set(fill_values)
@@ -70,7 +81,15 @@ class DeliveryDrones:
         if exclude is not None:
             p_choice &= ~exclude
         p_choice = p_choice.ravel()
-        pos = jax.random.choice(key, params.grid_size ** 2, shape=(params.n_drones,), p=p_choice, replace=False)
+        # pos = jax.random.choice(key, params.grid_size ** 2, shape=(params.n_drones,), p=p_choice, replace=False)
+
+        # new method
+        # noise = jax.random.gumbel(key, shape=(params.grid_size ** 2,))
+        noise = jax.random.uniform(key, shape=(params.grid_size ** 2,))
+        scores = jnp.log(p_choice) + noise
+        # _, pos = jax.lax.top_k(scores, k=params.n_drones)
+        _, pos = jax.lax.approx_max_k(scores, params.n_drones)
+
         random_x_pos = pos // params.grid_size
         random_y_pos = pos % params.grid_size
         x_pos = jnp.where(x_pos == -1, random_x_pos, x_pos)
@@ -192,6 +211,15 @@ class DeliveryDrones:
         # trick: if no deliveries took place we spawn a "0", else Object.PACKET
         done_while_carrying_package = dones & state.carrying_package
         fill_values = fill_values.at[:len(delivered)].set((delivered | done_while_carrying_package) * Object.PACKET.value)
+        ground = self.spawn(spawn_key, ground, fill_values, params)
+
+        # respawn dropzones
+        num_dropzones = params.packets_factor * params.n_drones
+        fill_values = jnp.zeros(num_dropzones, dtype=jnp.int8)
+        fill_values = fill_values.at[:len(delivered)].set(delivered * Object.DROPZONE.value)
+        mask = jnp.zeros_like(state.ground, dtype=jnp.bool)
+        mask = mask.at[new_y, new_x].set(delivered)
+        ground = ground * ~mask
         ground = self.spawn(spawn_key, ground, fill_values, params)
 
         # compute rewards

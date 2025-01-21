@@ -31,14 +31,14 @@ def train():
     hidden_layers = (32, 32)
     # n_drones = 3
     # grid_size = 10
-    # n_drones = 1024
-    # grid_size = 185
+    n_drones = 1024
+    grid_size = 185
     # n_drones = 4096
     # grid_size = 370
 
     # Florian's benchmark
-    n_drones = 32
-    grid_size = 26
+    # n_drones = 32
+    # grid_size = 26
     # n_drones = 512
     # grid_size = 102
     # n_drones = 2048
@@ -131,21 +131,21 @@ def train():
 
         return (rng, state, next_obs, ag_state, bstate), loss
 
-    num_repeats = 3
+    num_repeats = 1
     skip_first = 1
-    num_steps = 1000
-    num_steps_scan = 1000
+    num_steps = 400
+    num_steps_scan = 100
     num_batches = num_steps // num_steps_scan
     timings = []
     for _ in trange(num_repeats):
-        ts = timer()
         for batch in trange(num_batches, unit='batch'):
+            ts = timer()
             init_carry = (rng, state, obs, ag_state, bstate)
             final_carry, loss = jax.lax.scan(_train, init_carry, jnp.arange(num_steps_scan))
             rng, state, _, ag_state, _ = final_carry
-        rng.block_until_ready()
-        timings.append(timer() - ts)
-    step_mean, step_stdev = stats(timings[skip_first:], factor=1000.0/num_steps)
+            rng.block_until_ready()
+            timings.append(timer() - ts)
+    step_mean, step_stdev = stats(timings[skip_first:], factor=1000.0/num_steps_scan)
     logger.info(f'Scan training took {step_mean:.3f} ± {step_stdev:>6.3f} s/k steps')
 
     def _eval(carry, step):
@@ -177,7 +177,7 @@ def train():
     logger.info(f'... eval of {num_test_steps:,} steps took {timer()-ts:.3f}s. Mean reward: {mean_reward}')
 
     # render_video(test_env_params, ag_state)
-    # render_video(test_env_params, ag_state, temp_dir='output', num_steps=200)
+    render_video(test_env_params, ag_state, temp_dir='output', num_steps=200)
 
 
 if __name__ == "__main__":
