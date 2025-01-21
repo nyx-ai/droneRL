@@ -147,13 +147,14 @@ class DenseQNetworkFactory(DQNFactoryTemplate):
     A Q-network factory for dense Q-networks
     """
 
-    def __init__(self, env, hidden_layers=[]):
+    def __init__(self, env, hidden_layers=[], learning_rate: float = 1e-3):
         self.env = env
         self.hidden_layers = hidden_layers
+        self.learning_rate = learning_rate
 
     def create_qnetwork(self, target_qnetwork):
         network = DenseQNetwork(self.env, self.hidden_layers)
-        optimizer = optim.Adam(network.parameters())
+        optimizer = optim.Adam(network.parameters(), lr=self.learning_rate)
         print(network)
         return network, optimizer
 

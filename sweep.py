@@ -1,4 +1,6 @@
 import statistics
+import logging
+import math
 
 import wandb
 
@@ -12,8 +14,11 @@ from helpers.rl_helpers import test_agents
 wandb.login()
 
 SWEEP_NAME = "dronerl-dense-1"
-NUM_TRAINING_STEPS = 10_000  # 25_000
-NUM_TESTING_STEPS = 10_000
+NUM_TRAINING_STEPS = 1_000
+NUM_TESTING_STEPS = 1_000
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)-5.5s] [%(name)-12.12s]: %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def evaluate(config):
@@ -26,38 +31,46 @@ def evaluate(config):
         'delivery_reward': 1,
         'charge': 20,
         'discharge': 10,
-        'drone_density': 0.05,
+        'drone_density': 0.03,
         'dropzones_factor': 2,
         'packets_factor': 3,
         'skyscrapers_factor': 3,
         'stations_factor': 2
     })
 
+    drone_density = 0.03
+    n_drones = 1024
+
     training_env = WindowedGridView(DeliveryDrones(), radius=3)
     training_env.env_params.update({
-        'n_drones': config.n_drones,
+        'n_drones': n_drones,
         'charge_reward': -0.1,
         'crash_reward': -1,
         'pickup_reward': 0,
         'delivery_reward': 1,
         'charge': 20,
         'discharge': 10,
-        'drone_density': 0.05,
+        'drone_density': drone_density,
         'dropzones_factor': 2,
         'packets_factor': 3,
         'skyscrapers_factor': 3,
         'stations_factor': 2
     })
     training_env.reset()
+    grid_size = training_env.env.ground.shape[0]
+    logger.info(f'Training env of grid {grid_size}x{grid_size} and {n_drones} drones')
     agents = {drone.index: RandomAgent(training_env) for drone in training_env.drones}
     agents[0] = DQNAgent(
         env=training_env,
-        dqn_factory=DenseQNetworkFactory(training_env, hidden_layers=[config.size_layers] * config.num_layers),
+        dqn_factory=DenseQNetworkFactory(
+            training_env,
+            hidden_layers=[config.size_layers] * config.num_layers,
+            learning_rate=config.learning_rate),
         gamma=config.gamma,
         epsilon_start=1.0,
         epsilon_decay=config.epsilon_decay,
         epsilon_end=0.01,
-        memory_size=10_000_000,
+        memory_size=config.memory_size,
         batch_size=config.batch_size,
         target_update_interval=config.target_update_interval
     )
@@ -77,56 +90,41 @@ def main():
 # https://docs.wandb.ai/guides/sweeps/define-sweep-configuration
 sweep_configuration = {
     "method": "bayes",
-    "metric": {
-        "name": "score",
-        "goal": "maximize",
-    },
+    "metric": {"goal": "maximize", "name": "score"},
     "parameters": {
         "size_layers": {
-            "distribution": "q_log_uniform_values",
-            "min": 1,
-            "max": 256,
+            'values': [2 ** i for i in range(9)]
         },
         "num_layers": {
-            "distribution": "int_uniform",
-            "min": 1,
-            "max": 4,
+            'values': [2 ** i for i in range(8)]
         },
         "gamma": {
-            "distribution": "q_log_uniform_values",
-            "q": 0.001,
-            "min": 0.9,
+            "min": 0.8,
             "max": 1.0,
         },
         "epsilon_decay": {
-            "distribution": "q_log_uniform_values",
-            "q": 0.001,
-            "min": 0.9,
+            "min": 0.8,
             "max": 1.0,
         },
+        "learning_rate": {
+            "min": 1e-6,
+            "max": 1e-1,
+        },
         "target_update_interval": {
-            "distribution": "q_log_uniform_values",
             "min": 1,
-            "max": 256,
+            "max": 100,
         },
         "batch_size": {
-            "distribution": "q_log_uniform_values",
+            'values': [2 ** i for i in range(10)]
+        },
+        "memory_size": {
+            "distribution": "q_uniform",
             "min": 1,
-            "max": 256,
+            "max": 50_000,
+            'q': 1000,
         },
-        "n_drones": {
-            "distribution": "int_uniform",
-            "min": 2,
-            "max": 5,
-        },
-        # TODO implement support
-        # "lr": {
-        #     "distribution": "log_uniform_values",
-        #     "min": 0.0001,
-        #     "max": 0.01
-        # }
     },
 }
 
-sweep_id = wandb.sweep(sweep=sweep_configuration, project=SWEEP_NAME)
-wandb.agent(sweep_id, function=main, count=10_000_000)
+sweep_id = wandb.sweep(sweep=sweep_configuration, project=SWEEP_NAME, entity='nyxai')
+wandb.agent(sweep_id, function=main, count=1000)
