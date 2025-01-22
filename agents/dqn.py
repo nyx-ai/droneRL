@@ -154,7 +154,6 @@ class DenseQNetworkFactory(DQNFactoryTemplate):
     def create_qnetwork(self, target_qnetwork):
         network = DenseQNetwork(self.env, self.hidden_layers)
         optimizer = optim.Adam(network.parameters())
-        print(network)
         return network, optimizer
 
 

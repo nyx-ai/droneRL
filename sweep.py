@@ -4,22 +4,23 @@ import wandb
 
 from agents.dqn import DQNAgent, DenseQNetworkFactory
 from agents.random import RandomAgent
-from env.env import DeliveryDrones
-from env.wrappers import WindowedGridView
+from env.v3.env import DeliveryDrones
+from env.v3.wrappers import WindowedGridView
 from helpers.rl_helpers import MultiAgentTrainer
 from helpers.rl_helpers import test_agents
 
 wandb.login()
 
 SWEEP_NAME = "dronerl-dense-1"
-NUM_TRAINING_STEPS = 10_000  # 25_000
-NUM_TESTING_STEPS = 10_000
+NUM_TRAINING_STEPS = 15_000
+NUM_TESTING_STEPS = 100_000
 
 
 def evaluate(config):
     testing_env = WindowedGridView(DeliveryDrones(), radius=3)
+    # official AIcrowd values
     testing_env.env_params.update({
-        'n_drones': 3,
+        'n_drones': 6,
         'charge_reward': -0.1,
         'crash_reward': -1,
         'pickup_reward': 0,
@@ -38,7 +39,7 @@ def evaluate(config):
         'n_drones': config.n_drones,
         'charge_reward': -0.1,
         'crash_reward': -1,
-        'pickup_reward': 0,
+        'pickup_reward': config.pickup_reward,
         'delivery_reward': 1,
         'charge': 20,
         'discharge': 10,
@@ -48,9 +49,11 @@ def evaluate(config):
         'skyscrapers_factor': 3,
         'stations_factor': 2
     })
+
+    # TRAINING
     training_env.reset()
-    agents = {drone.index: RandomAgent(training_env) for drone in training_env.drones}
-    agents[0] = DQNAgent(
+    training_agents = {drone.index: RandomAgent(training_env) for drone in training_env.drones}
+    training_agents[0] = DQNAgent(
         env=training_env,
         dqn_factory=DenseQNetworkFactory(training_env, hidden_layers=[config.size_layers] * config.num_layers),
         gamma=config.gamma,
@@ -61,9 +64,14 @@ def evaluate(config):
         batch_size=config.batch_size,
         target_update_interval=config.target_update_interval
     )
-    trainer = MultiAgentTrainer(training_env, agents, reset_agents=True, seed=0)
+    trainer = MultiAgentTrainer(training_env, training_agents, reset_agents=True, seed=0)
     trainer.train(NUM_TRAINING_STEPS)
-    rewards_log = test_agents(training_env, agents, n_steps=NUM_TESTING_STEPS, seed=0)
+
+    # EVALUATION
+    testing_env.reset()
+    testing_agents = {drone.index: RandomAgent(testing_env) for drone in testing_env.drones}
+    testing_agents[0] = training_agents[0]
+    rewards_log = test_agents(testing_env, testing_agents, n_steps=NUM_TESTING_STEPS, seed=0)
     rewards = {k: statistics.mean(v) for k, v in rewards_log.items()}
     return rewards[0]
 
@@ -82,6 +90,11 @@ sweep_configuration = {
         "goal": "maximize",
     },
     "parameters": {
+        "pickup_reward": {
+            "distribution": "uniform",
+            "min": 0.0,
+            "max": 1.0,
+        },
         "size_layers": {
             "distribution": "q_log_uniform_values",
             "min": 1,

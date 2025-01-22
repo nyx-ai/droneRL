@@ -334,7 +334,7 @@ class DeliveryDrones(Env):
         info = {'air_respawns': air_respawns, 'ground_respawns': ground_respawns}
         return self._get_grids(), rewards, dones, None, info
 
-    def reset(self):
+    def reset(self, seed=0):
         # Define size of the environment
         self.side_size = int(np.ceil(np.sqrt(self.env_params['n_drones'] / self.env_params['drone_density'])))
         self.shape = (self.side_size, self.side_size)
