@@ -1,5 +1,4 @@
 import time
-import numpy as np
 from dataclasses import dataclass
 from tqdm import tqdm
 from tabulate import tabulate
@@ -26,9 +25,9 @@ class Config:
 
 
 # CONFIG #
-n_steps = 50
-# drone_counts = [2048]
-drone_counts = [32, 128, 512, 2048, 2048*4]
+n_steps = 1000
+# drone_counts = [32]
+drone_counts = [32, 128, 512, 2048]
 
 configs = [
     Config(
@@ -51,15 +50,14 @@ impls = [
         env=WindowedGridViewV1(DeliveryDronesV1(), radius=3),
         desc="original 2020 version"
     ),
-    Impl(
-        name="v2",
-        env=WindowedGridViewV2(DeliveryDronesV2(), radius=3),
-        desc="2020 grid-based version using constants instead of objects for what's on the map"
-    ),
+    # Impl(
+    #     name="v2",
+    #     env=WindowedGridViewV2(DeliveryDronesV2(), radius=3),
+    #     desc="2020 grid-based version using constants instead of objects for what's on the map"
+    # ),
     Impl(
         name="v3",
         env=WindowedGridViewV3(DeliveryDronesV3(), radius=3),
-        # env=DeliveryDronesV3(),
         desc="dict-based version"
     ),
 ]
@@ -83,7 +81,7 @@ def benchmark_implementation(imp, config, n_drones, n_steps):
         # print(imp.env.render(mode='ansi'))
 
     total_time = time.perf_counter() - start_time
-    mean_time = (total_time / n_steps) * 1000  # Convert to ms per step and scale for per 1000 steps
+    mean_time = (total_time / n_steps) * 1000
     sps = n_steps / total_time
 
     # Identify reference time for comparison
@@ -93,7 +91,7 @@ def benchmark_implementation(imp, config, n_drones, n_steps):
     percent_diff = (reference_speeds[key] / mean_time) if key in reference_speeds else 0
 
     results.append([
-        imp.name, config.name, n_drones, f"{imp.env.side_size}x{imp.env.side_size}", f"{mean_time:.1f} spKs",
+        imp.name, config.name, n_drones, f"{imp.env.side_size}x{imp.env.side_size}", f"{mean_time:.2f} spKs",
         f"{sps:.1f} sps", f"{percent_diff:.2f}"
     ])
 
@@ -104,7 +102,6 @@ if __name__ == '__main__':
             for n_drones in drone_counts:
                 benchmark_implementation(imp, config, n_drones, n_steps)
 
-    # Print results as a table
     print(
         tabulate(results, headers=['Implementation', 'Config', 'Drones', "Size", 'Speed', 'Speed', 'Speedup from V1'])
     )

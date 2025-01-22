@@ -54,6 +54,6 @@ class WindowedGridView(gym.ObservationWrapper):
                                   top_left_y - self.radius: top_left_y + self.radius + 1,
                                   top_left_x - self.radius: top_left_x + self.radius + 1,
                                   :
-                                  ]
+                                  ].copy()
 
         return states
