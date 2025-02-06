@@ -12,8 +12,8 @@ from helpers.rl_helpers import test_agents
 wandb.login()
 
 SWEEP_NAME = "dronerl-dense-1"
-NUM_TRAINING_STEPS = 15_000
-NUM_TESTING_STEPS = 100_000
+NUM_TRAINING_STEPS = 5_000
+NUM_TESTING_STEPS = 50_000
 
 
 def evaluate(config):
@@ -96,41 +96,31 @@ sweep_configuration = {
             "max": 1.0,
         },
         "size_layers": {
-            "distribution": "q_log_uniform_values",
-            "min": 1,
-            "max": 256,
+            "values": [16, 32, 64, 128, 256]
         },
         "num_layers": {
-            "distribution": "int_uniform",
-            "min": 1,
-            "max": 4,
+            "values": [1, 2, 3, 4]
         },
         "gamma": {
-            "distribution": "q_log_uniform_values",
-            "q": 0.001,
+            "distribution": "log_uniform_values",
             "min": 0.9,
-            "max": 1.0,
+            "max": 0.999
         },
         "epsilon_decay": {
-            "distribution": "q_log_uniform_values",
-            "q": 0.001,
-            "min": 0.9,
-            "max": 1.0,
+            "distribution": "log_uniform_values",
+            "min": 0.99,
+            "max": 0.99999
         },
         "target_update_interval": {
-            "distribution": "q_log_uniform_values",
-            "min": 1,
-            "max": 256,
+            "values": [1, 2, 4, 8, 16, 32, 64, 128, 256]
         },
         "batch_size": {
-            "distribution": "q_log_uniform_values",
-            "min": 1,
-            "max": 256,
+            "values": [16, 32, 64, 128, 256]
         },
         "n_drones": {
             "distribution": "int_uniform",
-            "min": 2,
-            "max": 5,
+            "min": 1,
+            "max": 10,
         },
         # TODO implement support
         # "lr": {
