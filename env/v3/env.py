@@ -60,11 +60,10 @@ class DeliveryDrones(Env):
 
     def spawn_objects(self, available_pos, num_obj):
         positions_dict = {}
-        positions = random.sample(available_pos, num_obj)
-        for i in range(num_obj):
-            position = positions.pop()
+        random.shuffle(available_pos)
+        for _ in range(num_obj):
+            position = available_pos.pop()
             positions_dict[position] = True
-            available_pos.remove(position)
         return positions_dict, available_pos
 
     def reset(self, seed=0):
@@ -80,7 +79,7 @@ class DeliveryDrones(Env):
         num_packets = self.env_params['packets_factor'] * self.env_params['n_drones']
         num_dropzone = self.env_params['dropzones_factor'] * self.env_params['n_drones']
         num_stations = self.env_params['stations_factor'] * self.env_params['n_drones']
-        available_positions = set((x, y) for x in range(self.side_size) for y in range(self.side_size))
+        available_positions = [(x, y) for x in range(self.side_size) for y in range(self.side_size)]
         self._skyscrapers, available_positions = self.spawn_objects(available_positions, num_skyscrapers)
 
         # Add the drones, which don't remove their positions from available_positions
@@ -180,15 +179,19 @@ class DeliveryDrones(Env):
             self._drones[self._find_respawn_position(self._drones | self._skyscrapers)] = crashed_drone
 
         # Respawn used packets and dropzones
-        ground_mask = {**self._skyscrapers, **self._packets, **self._dropzones, **self._stations}
+        ground_mask = {}
+        ground_mask.update(self._skyscrapers)
+        ground_mask.update(self._packets)
+        ground_mask.update(self._dropzones)
+        ground_mask.update(self._stations)
         for _ in range(nb_packets_to_respawn):
             position = self._find_respawn_position(ground_mask)
             self._packets[position] = True
-            ground_mask = ground_mask | {position: True}
+            ground_mask[position] = True
         for _ in range(nb_dropzones_to_respawn):
             position = self._find_respawn_position(ground_mask)
             self._dropzones[position] = True
-            ground_mask = ground_mask | {position: True}
+            ground_mask[position] = True
 
         # check if some packets are immediately picked
         self._pick_packets_after_respawn()
