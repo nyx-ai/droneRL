@@ -4,9 +4,9 @@ import tempfile
 
 import pytest
 
-from python.env.env import DeliveryDrones
-from python.env.wrappers import WindowedGridView
-from python.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
+from env.env import DeliveryDrones
+from env.wrappers import WindowedGridView
+from agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
 
 
 @pytest.mark.parametrize("factory_class,factory_params", [
@@ -83,7 +83,3 @@ def test_agent_save_load(factory_class, factory_params):
 
     assert actions == new_actions, "Actions before and after loading should be identical"
     print("Actions before and after loading are identical")
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])

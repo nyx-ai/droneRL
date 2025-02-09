@@ -5,7 +5,7 @@ import gym
 
 class WindowedGridView(gym.ObservationWrapper):
     def __init__(self, env, radius):
-        super().__init__(env)
+        super().__init__(env,new_step_api=True)
         self.radius = radius
         assert radius > 0, "Radius should be strictly positive"
         self.observation_space = spaces.Box(

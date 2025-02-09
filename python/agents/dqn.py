@@ -160,11 +160,11 @@ class DenseQNetworkFactory(DQNFactoryTemplate):
 
     def __init__(self, env, hidden_layers=[], learning_rate: float = 1e-3):
         self.env = env
-        self.hidden_layers = hidden_layers
+        self.dense_layers = hidden_layers
         self.learning_rate = learning_rate
 
     def create_qnetwork(self, target_qnetwork):
-        network = DenseQNetwork(self.env, self.hidden_layers)
+        network = DenseQNetwork(self.env, self.dense_layers)
         optimizer = optim.Adam(network.parameters(), lr=self.learning_rate)
         print(network)
         return network, optimizer
