@@ -4,3 +4,4 @@ venv
 .DS_Store
 __pycache__
 wandb
+baseline_models/**/*.safetensors
