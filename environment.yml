@@ -1,5 +1,6 @@
 name: dronerl-env-v3
 channels:
+  - defaults
   - pytorch
 dependencies:
   - python=3.11
