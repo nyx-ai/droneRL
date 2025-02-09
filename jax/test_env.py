@@ -195,6 +195,7 @@ def test_skyscrapers(drone_env_skyscrapers):
     assert state_out.ground[3, 4] == Object.SKYSCRAPER  # skyscraper hasn't moved
 
 
+@pytest.mark.focus
 def test_packages(drone_env_packages):
     state, params = drone_env_packages
     env = DeliveryDrones()
@@ -212,7 +213,7 @@ def test_packages(drone_env_packages):
     assert state_out2.air_x == jnp.array([5])
     assert state_out2.air_y == jnp.array([3])
     assert rewards[0] == params.pickup_reward + params.delivery_reward
-    assert state_out2.ground[3, 5] == Object.DROPZONE
+    assert state_out2.ground[4, 2] == Object.DROPZONE  # dropzone has respawned
     assert jnp.sum(state_out2.ground > 0) == 2
 
 
@@ -238,7 +239,6 @@ def test_single_movements(single_drone_env):
         assert state_out.air_y == jnp.array([y], dtype=jnp.int32)
 
 
-@pytest.mark.focus
 def test_get_obs(drone_env_packages):
     state, params = drone_env_packages
     env = DeliveryDrones()
