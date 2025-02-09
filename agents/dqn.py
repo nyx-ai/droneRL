@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch import Tensor, LongTensor
 import os
+from safetensors.torch import save_file, safe_open
 
 from .logging import Logger, NoLogger
 
@@ -35,8 +36,10 @@ class DenseQNetwork(nn.Module):
 
     def __init__(self, env, hidden_layers=[]):
         # Action space and observation spaces should be OpenAI gym spaces
-        assert isinstance(env.observation_space, spaces.Space), 'Observation space should be an OpenAI Gym space'
-        assert isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
+        assert isinstance(
+            env.observation_space, spaces.Space), 'Observation space should be an OpenAI Gym space'
+        assert isinstance(
+            env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
 
         # Create network
         super().__init__()  # Initialize module
@@ -44,7 +47,7 @@ class DenseQNetwork(nn.Module):
 
         self.input_size = spaces.flatdim(self.env.observation_space)
         self.output_size = self.env.action_space.n
-        self.hidden_layers = hidden_layers
+        self.dense_layers = hidden_layers
 
         self.network = nn.Sequential()
         hidden_layers = hidden_layers + [self.output_size]
@@ -64,7 +67,8 @@ class DenseQNetwork(nn.Module):
 
     def forward(self, states):
         # Efficient flattening of states and tensor conversion
-        states_flattened = np.array([spaces.flatten(self.env.observation_space, s) for s in states])
+        states_flattened = np.array(
+            [spaces.flatten(self.env.observation_space, s) for s in states])
         states_tensor = torch.Tensor(states_flattened).to(device)
         return self.network(states_tensor)
 
@@ -77,9 +81,12 @@ class ConvQNetwork(nn.Module):
     def __init__(self, env, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}],
                  dense_layers=[]):
         # Action space and observation spaces should by OpenAI gym spaces
-        isinstance(env.observation_space, spaces.Box), 'Observation space should be a OpenAI Gym "Box" 3d space'
-        isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
-        assert len(env.observation_space.shape) == 3, 'Observation space should be a OpenAI Gym "Box" 3d space'
+        isinstance(env.observation_space,
+                   spaces.Box), 'Observation space should be a OpenAI Gym "Box" 3d space'
+        isinstance(env.action_space,
+                   spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
+        assert len(
+            env.observation_space.shape) == 3, 'Observation space should be a OpenAI Gym "Box" 3d space'
 
         # Create network
         super().__init__()  # Initialize module
@@ -102,11 +109,13 @@ class ConvQNetwork(nn.Module):
 
             # Add layer + activation
             self.network.add_module('conv2d_{}'.format(conv_i + 1), layer)
-            self.network.add_module('conv2d_act_{}'.format(conv_i + 1), nn.ReLU())
+            self.network.add_module(
+                'conv2d_act_{}'.format(conv_i + 1), nn.ReLU())
 
         # Flatten
         self.network.add_module('flatten', nn.Flatten())
-        _, flatsize = self.network(torch.ones([1, self.input_shape[2], self.input_shape[0], self.input_shape[1]])).shape
+        _, flatsize = self.network(torch.ones(
+            [1, self.input_shape[2], self.input_shape[0], self.input_shape[1]])).shape
 
         # Dense layers
         dense_layers = self.dense_layers + [self.output_size]
@@ -118,7 +127,8 @@ class ConvQNetwork(nn.Module):
 
             # Add layer + activation
             if dense_i > 0:
-                self.network.add_module('dense_act_{}'.format(dense_i), nn.ReLU())
+                self.network.add_module(
+                    'dense_act_{}'.format(dense_i), nn.ReLU())
             self.network.add_module('dense_{}'.format(dense_i + 1), layer)
 
         # Move network to GPU if available
@@ -128,7 +138,8 @@ class ConvQNetwork(nn.Module):
         # Convert states to tensor and rearrange dimensions
         # states input shape is [batch_size, height, width, channels]
         # we need [batch_size, channels, height, width] for PyTorch convolutions
-        states_tensor = torch.tensor(np.array(states), dtype=torch.float32, device=device).permute(0, 3, 1, 2)
+        states_tensor = torch.tensor(
+            np.array(states), dtype=torch.float32, device=device).permute(0, 3, 1, 2)
         return self.network(states_tensor)
 
 
@@ -149,10 +160,10 @@ class DenseQNetworkFactory(DQNFactoryTemplate):
 
     def __init__(self, env, hidden_layers=[]):
         self.env = env
-        self.hidden_layers = hidden_layers
+        self.dense_layers = hidden_layers
 
     def create_qnetwork(self, target_qnetwork):
-        network = DenseQNetwork(self.env, self.hidden_layers)
+        network = DenseQNetwork(self.env, self.dense_layers)
         optimizer = optim.Adam(network.parameters())
         return network, optimizer
 
@@ -162,15 +173,24 @@ class ConvQNetworkFactory(DQNFactoryTemplate):
     A Q-network factory for convolutional Q-networks
     """
 
-    def __init__(self, env, conv_layers=[], dense_layers=[]):
+    def __init__(self, env, conv_layers=None, dense_layers=None):
         self.env = env
-        self.conv_layers = conv_layers
-        self.dense_layers = dense_layers
+        # Set default conv layer if none provided
+        self.conv_layers = conv_layers or [
+            {'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}]
+        self.dense_layers = dense_layers or []
+
+        # Validate conv layers have required parameters
+        for layer in self.conv_layers:
+            required = {'out_channels', 'kernel_size', 'stride', 'padding'}
+            missing = required - set(layer.keys())
+            if missing:
+                raise ValueError(
+                    f"Conv layer missing required parameters: {missing}")
 
     def create_qnetwork(self, target_qnetwork):
         network = ConvQNetwork(self.env, self.conv_layers, self.dense_layers)
         optimizer = optim.Adam(network.parameters())
-        print(network)
         return network, optimizer
 
 
@@ -198,20 +218,12 @@ class DQNAgent():
 
         self.reset()
 
-    def get_hyperparameters(self):
-        hyperparams = {
-            'gamma': self.gamma,
-            'batch_size': self.batch_size,
-            'conv-network': self.dqn_factory.conv_layers,
-            'dense-network': self.dqn_factory.dense_layers
-        }
-
-        return hyperparams
-
     def reset(self):
         # Create networks with episode counter to know when to update them
-        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork(target_qnetwork=False)
-        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork(target_qnetwork=True)
+        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork(
+            target_qnetwork=False)
+        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork(
+            target_qnetwork=True)
         self.num_episode = 0
         self.episode_reward = 0
         self.total_steps = 0
@@ -224,10 +236,57 @@ class DQNAgent():
         self.memory = deque(maxlen=self.memory_size)
 
     def save(self, path):
-        torch.save(self.qnetwork, path)
+        state_dict = self.qnetwork.state_dict()
+        metadata = {
+            "network_type": "dense" if isinstance(self.qnetwork, DenseQNetwork) else "conv",
+            "hidden_layers": str(self.dqn_factory.dense_layers),
+            # "input_size": str(self.qnetwork.input_size),
+            "output_size": str(self.qnetwork.output_size)
+        }
+        if hasattr(self.dqn_factory, 'conv_layers'):
+            # Save full conv layer configurations including all parameters
+            metadata["conv_layers"] = str([{
+                'out_channels': layer['out_channels'],
+                'kernel_size': layer['kernel_size'],
+                'stride': layer['stride'],
+                'padding': layer['padding']
+            } for layer in self.dqn_factory.conv_layers])
+            metadata["dense_layers"] = str(self.dqn_factory.dense_layers)
+
+        # print("SAVED METADATA", metadata)
+
+        save_file(state_dict, path, metadata=metadata)
 
     def load(self, path):
-        self.qnetwork = torch.load(path, map_location=device)
+        loaded = {}
+        metadata = {}
+        with safe_open(path, framework="pt", device="cpu") as f:
+            for key in f.keys():
+                loaded[key] = f.get_tensor(key)
+            for k, v in f.metadata().items():
+                metadata[k] = v
+
+        if metadata["network_type"] == "dense":
+            hidden_layers = eval(metadata["hidden_layers"])
+            self.dqn_factory = DenseQNetworkFactory(
+                self.env, hidden_layers=hidden_layers)
+        else:
+            conv_layers = eval(metadata["conv_layers"])
+            dense_layers = eval(metadata["dense_layers"])
+            self.dqn_factory = ConvQNetworkFactory(
+                self.env, conv_layers=conv_layers, dense_layers=dense_layers)
+
+        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork(
+            target_qnetwork=False)
+        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork(
+            target_qnetwork=True)
+
+        # assert self.qnetwork.input_size == int(metadata["input_size"]), "Input size mismatch"
+        assert self.qnetwork.output_size == int(
+            metadata["output_size"]), "Output size mismatch"
+
+        self.qnetwork.load_state_dict(loaded)
+        self.target_qnetwork.load_state_dict(loaded)
 
     def act(self, state):
         # Exploration rate
@@ -255,7 +314,8 @@ class DQNAgent():
             self.epsilons.append(self.epsilon)  # Log epsilon value
 
             # Epsilon decay
-            self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_end)
+            self.epsilon = max(
+                self.epsilon * self.epsilon_decay, self.epsilon_end)
 
             self.episode_reward = 0
 
@@ -267,7 +327,8 @@ class DQNAgent():
         if len(self.memory) > self.batch_size:
             # Sample batch of experience
             # batch = random.sample(self.memory, self.batch_size)
-            batch_indices = np.random.choice(len(self.memory), self.batch_size, replace=False)
+            batch_indices = np.random.choice(
+                len(self.memory), self.batch_size, replace=False)
             batch = [self.memory[idx] for idx in batch_indices]
             state, action, reward, next_state, done = zip(*batch)
 
@@ -301,8 +362,11 @@ class DQNAgent():
 
     def inspect_memory(self, top_n=10, max_col=80):
         # Functions to encode/decode states
-        encode_state = lambda s: tuple(spaces.flatten(self.env.observation_space, s))
-        decode_state = lambda s: spaces.unflatten(self.env.observation_space, s)
+        def encode_state(s): return tuple(
+            spaces.flatten(self.env.observation_space, s))
+
+        def decode_state(s): return spaces.unflatten(
+            self.env.observation_space, s)
 
         # Function to create barchart from counter
         def count_barchart(counter, ax, xlabel=None, normalize=True):
@@ -331,8 +395,10 @@ class DQNAgent():
             for i, (state, count) in enumerate(counter.most_common(top_n), 1):
                 state_label = str(decode_state(state))
                 state_label = state_label.replace('\n', ' ')
-                state_label = state_label[:max_col] + '..' if len(state_label) > max_col else state_label
-                print('{:>2}) Count: {} state: {}'.format(i, count, state_label))
+                state_label = state_label[:max_col] + \
+                    '..' if len(state_label) > max_col else state_label
+                print('{:>2}) Count: {} state: {}'.format(
+                    i, count, state_label))
 
         # Count statistics
         counters = defaultdict(Counter)
@@ -360,4 +426,5 @@ class DQNAgent():
         print()
 
         # Done signal
-        print('Proportion of done: {:.2f}%'.format(100 * counters['done'][True] / sum(counters['done'].values())))
+        print('Proportion of done: {:.2f}%'.format(
+            100 * counters['done'][True] / sum(counters['done'].values())))

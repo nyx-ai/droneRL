@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  push:
+    branches: [ benchmark ]
+  pull_request:
+    branches: [ benchmark ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        activate-environment: dronerl-env-v3
+        environment-file: environment.yml
+        auto-activate-base: false
+        
+    - name: Run Tests
+      shell: bash -l {0}
+      run: |
+        conda activate dronerl-env-v3
+        pytest tests/ 

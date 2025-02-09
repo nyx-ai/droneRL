@@ -30,11 +30,11 @@ class DeliveryDrones(Env):
         'dropzones_factor': 2,
         'stations_factor': 2,
         'skyscrapers_factor': 3,
-        'rgb_render_rescale': 1.0
+        'rgb_render_rescale': 1.0,
     }
 
     metadata = {
-        'render.modes': ['ansi']
+        'render.modes': ['ansi'],
     }
 
     def __init__(self, env_params={}):

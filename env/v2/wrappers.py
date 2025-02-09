@@ -222,7 +222,7 @@ class WindowedGridView(ObservationWrapper):
 
     def __init__(self, env, radius):
         # Initialize wrapper with observation space
-        super().__init__(env)
+        super().__init__(env, new_step_api=True)
         self.radius = radius
         assert radius > 0, "radius should be strictly positive"
 
