@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [ benchmark ]
+    branches: [ env-only ]
   pull_request:
-    branches: [ benchmark ]
+    branches: [ env-only ]
 
 jobs:
   test-conda:
