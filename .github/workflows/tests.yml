@@ -7,7 +7,7 @@ on:
     branches: [ env-only ]
 
 jobs:
-  test-conda:
+  test-python-conda:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -25,7 +25,7 @@ jobs:
         conda activate dronerl-env-v3
         pytest python/
 
-  test-pip:
+  test-python-pip:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -41,4 +41,22 @@ jobs:
         pip install -r requirements.txt
         
     - name: Run Tests
-      run: pytest python/ 
+      run: pytest python/
+
+  test-jax:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r jax/requirements.cpu.txt
+        
+    - name: Run Tests
+      run: pytest jax/ 
