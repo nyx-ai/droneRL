@@ -33,23 +33,23 @@ class Config:
 
 # CONFIG #
 train = True
-n_steps = 50_000
-drone_counts = [3]
-# drone_counts = [32, 128, 512, 2048]
+n_steps = 25
+# drone_counts = [3]
+drone_counts = [32, 128, 512, 2048]
 
 configs = [
-    # Config(
-    #     name="DronesOnly",
-    #     params={'packets_factor': 0, 'dropzones_factor': 0, 'stations_factor': 0, 'skyscrapers_factor': 0}
-    # ),
+    Config(
+        name="DronesOnly",
+        params={'packets_factor': 0, 'dropzones_factor': 0, 'stations_factor': 0, 'skyscrapers_factor': 0}
+    ),
     Config(
         name="Default",
         params={}
     ),
-    # Config(
-    #     name="HighDensity",
-    #     params={'packets_factor': 4, 'dropzones_factor': 4, 'stations_factor': 4, 'skyscrapers_factor': 4}
-    # ),
+    Config(
+        name="HighDensity",
+        params={'packets_factor': 4, 'dropzones_factor': 4, 'stations_factor': 4, 'skyscrapers_factor': 4}
+    ),
 ]
 
 impls = [
@@ -94,7 +94,7 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
     # Update config with the number of drones for this run
     config_params = {**config.params, 'n_drones': n_drones, 'pickup_reward': 0.5}
     imp.env.env_params.update(config_params)
-    states, _ = imp.env.reset()
+    states = imp.env.reset()
     # print(imp.env.render(mode='ansi'))
 
     if train:
@@ -143,7 +143,7 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
             states = next_states
         total_time_learn += time.perf_counter() - time_learn_start
 
-        pbar.set_description(f"{statistics.mean(rewards_log[0][-500:]):.3f}")
+        # pbar.set_description(f"{statistics.mean(rewards_log[0][-500:]):.3f}")
 
     total_time = time.perf_counter() - start_time
     mean_time = (total_time / n_steps) * 1000
@@ -169,7 +169,7 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
         reward_trained, reward_untrained
     ])
 
-    plot_rewards(rewards_log)
+    # plot_rewards(rewards_log)
 
 
 if __name__ == '__main__':

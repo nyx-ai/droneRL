@@ -1,10 +1,12 @@
-import tempfile
 import os
+import sys
+import tempfile
+
 import pytest
 
-from env.v3.env import DeliveryDrones
-from env.v3.wrappers import WindowedGridView
-from agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
+from python.env.env import DeliveryDrones
+from python.env.wrappers import WindowedGridView
+from python.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
 
 
 @pytest.mark.parametrize("factory_class,factory_params", [

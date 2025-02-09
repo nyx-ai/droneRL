@@ -70,26 +70,36 @@ class DeliveryDrones(Env):
         # print("Resetting env...")
         self.reset_items()
 
-        self.side_size = int(math.ceil(math.sqrt(self.env_params['n_drones'] / self.env_params['drone_density'])))
+        self.side_size = int(math.ceil(
+            math.sqrt(self.env_params['n_drones'] / self.env_params['drone_density'])))
         self.shape = (self.side_size, self.side_size)
 
         # Create elements of the grid
         num_drones = self.env_params['n_drones']
-        num_skyscrapers = self.env_params['skyscrapers_factor'] * self.env_params['n_drones']
-        num_packets = self.env_params['packets_factor'] * self.env_params['n_drones']
-        num_dropzone = self.env_params['dropzones_factor'] * self.env_params['n_drones']
-        num_stations = self.env_params['stations_factor'] * self.env_params['n_drones']
-        available_positions = [(x, y) for x in range(self.side_size) for y in range(self.side_size)]
-        self._skyscrapers, available_positions = self.spawn_objects(available_positions, num_skyscrapers)
+        num_skyscrapers = self.env_params['skyscrapers_factor'] * \
+            self.env_params['n_drones']
+        num_packets = self.env_params['packets_factor'] * \
+            self.env_params['n_drones']
+        num_dropzone = self.env_params['dropzones_factor'] * \
+            self.env_params['n_drones']
+        num_stations = self.env_params['stations_factor'] * \
+            self.env_params['n_drones']
+        available_positions = [(x, y) for x in range(
+            self.side_size) for y in range(self.side_size)]
+        self._skyscrapers, available_positions = self.spawn_objects(
+            available_positions, num_skyscrapers)
 
         # Add the drones, which don't remove their positions from available_positions
         # as they can spawn on packets, dropzones or stations
         for i, p in enumerate(random.sample(available_positions, num_drones)):
             self._drones[p] = Drone(i)
 
-        self._packets, available_positions = self.spawn_objects(available_positions, num_packets)
-        self._dropzones, available_positions = self.spawn_objects(available_positions, num_dropzone)
-        self._stations, available_positions = self.spawn_objects(available_positions, num_stations)
+        self._packets, available_positions = self.spawn_objects(
+            available_positions, num_packets)
+        self._dropzones, available_positions = self.spawn_objects(
+            available_positions, num_dropzone)
+        self._stations, available_positions = self.spawn_objects(
+            available_positions, num_stations)
 
         # Check if some packets are immediately picked
         self._pick_packets_after_respawn()
@@ -136,7 +146,8 @@ class DeliveryDrones(Env):
             if drone not in crashed_drones:
                 # charging/discharging
                 if position in self._stations:
-                    drone.charge = min(100, drone.charge + self.env_params['charge'])
+                    drone.charge = min(100, drone.charge +
+                                       self.env_params['charge'])
                     rewards[drone.index] = self.env_params['charge_reward']
                 else:
                     drone.charge -= self.env_params['discharge']
@@ -176,7 +187,8 @@ class DeliveryDrones(Env):
                 crashed_drone.packet = False
             rewards[crashed_drone.index] = self.env_params['crash_reward']
             dones[crashed_drone.index] = True
-            self._drones[self._find_respawn_position(self._drones | self._skyscrapers)] = crashed_drone
+            self._drones[self._find_respawn_position(
+                self._drones | self._skyscrapers)] = crashed_drone
 
         # Respawn used packets and dropzones
         ground_mask = {}

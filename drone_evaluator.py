@@ -4,14 +4,14 @@ import numpy as np
 import torch
 import tqdm
 
-from env.v3.env import DeliveryDrones as DeliveryDrones
-from env.v3.wrappers import WindowedGridView as WindowedGridView
-from helpers.rl_helpers import set_seed
+from python.env.env import DeliveryDrones as DeliveryDrones
+from python.env.wrappers import WindowedGridView as WindowedGridView
+from python.helpers.rl_helpers import set_seed
 from PIL import Image
 import tempfile
 import aicrowd_helpers
 from safetensors.torch import load_file
-from agents.dqn import DenseQNetwork, device as dqn_device
+from python.agents.dqn import DenseQNetwork
 
 
 class DroneRacerEvaluator:
