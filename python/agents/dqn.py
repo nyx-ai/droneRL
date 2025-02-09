@@ -36,10 +36,8 @@ class DenseQNetwork(nn.Module):
 
     def __init__(self, env, hidden_layers=[]):
         # Action space and observation spaces should be OpenAI gym spaces
-        assert isinstance(
-            env.observation_space, spaces.Space), 'Observation space should be an OpenAI Gym space'
-        assert isinstance(
-            env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
+        assert isinstance(env.observation_space, spaces.Space), 'Observation space should be an OpenAI Gym space'
+        assert isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
 
         # Create network
         super().__init__()  # Initialize module
@@ -166,7 +164,6 @@ class DenseQNetworkFactory(DQNFactoryTemplate):
     def create_qnetwork(self, target_qnetwork):
         network = DenseQNetwork(self.env, self.dense_layers)
         optimizer = optim.Adam(network.parameters(), lr=self.learning_rate)
-        print(network)
         return network, optimizer
 
 
@@ -241,22 +238,15 @@ class DQNAgent():
         state_dict = self.qnetwork.state_dict()
         metadata = {
             "network_type": "dense" if isinstance(self.qnetwork, DenseQNetwork) else "conv",
-            "hidden_layers": str(self.dqn_factory.dense_layers),
-            # "input_size": str(self.qnetwork.input_size),
-            "output_size": str(self.qnetwork.output_size)
+            "dense_layers": str(self.dqn_factory.dense_layers),
         }
         if hasattr(self.dqn_factory, 'conv_layers'):
-            # Save full conv layer configurations including all parameters
             metadata["conv_layers"] = str([{
                 'out_channels': layer['out_channels'],
                 'kernel_size': layer['kernel_size'],
                 'stride': layer['stride'],
                 'padding': layer['padding']
             } for layer in self.dqn_factory.conv_layers])
-            metadata["dense_layers"] = str(self.dqn_factory.dense_layers)
-
-        # print("SAVED METADATA", metadata)
-
         save_file(state_dict, path, metadata=metadata)
 
     def load(self, path):
@@ -269,23 +259,19 @@ class DQNAgent():
                 metadata[k] = v
 
         if metadata["network_type"] == "dense":
-            hidden_layers = eval(metadata["hidden_layers"])
-            self.dqn_factory = DenseQNetworkFactory(
-                self.env, hidden_layers=hidden_layers)
+            hidden_layers = eval(metadata["dense_layers"])
+            self.dqn_factory = DenseQNetworkFactory(self.env, hidden_layers=hidden_layers)
         else:
             conv_layers = eval(metadata["conv_layers"])
             dense_layers = eval(metadata["dense_layers"])
-            self.dqn_factory = ConvQNetworkFactory(
-                self.env, conv_layers=conv_layers, dense_layers=dense_layers)
+            self.dqn_factory = ConvQNetworkFactory(self.env, conv_layers=conv_layers, dense_layers=dense_layers)
 
-        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork(
-            target_qnetwork=False)
-        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork(
-            target_qnetwork=True)
+        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork(target_qnetwork=False)
+        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork(target_qnetwork=True)
 
+        # TODO save and validate
         # assert self.qnetwork.input_size == int(metadata["input_size"]), "Input size mismatch"
-        assert self.qnetwork.output_size == int(
-            metadata["output_size"]), "Output size mismatch"
+        # assert self.qnetwork.output_size == int(metadata["output_size"]), "Output size mismatch"
 
         self.qnetwork.load_state_dict(loaded)
         self.target_qnetwork.load_state_dict(loaded)
@@ -361,6 +347,9 @@ class DQNAgent():
         else:
             # print(f"Not learning yet! {len(self.memory)}/{self.batch_size} experiences")
             pass
+
+    def __repr__(self) -> str:
+        return f"DQNAgent(dqn_factory={self.dqn_factory})"
 
     def inspect_memory(self, top_n=10, max_col=80):
         # Functions to encode/decode states
