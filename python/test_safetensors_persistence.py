@@ -9,15 +9,15 @@ from agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory, Base
 
 
 @pytest.mark.parametrize("factory_class,factory_params", [
-    (DenseQNetworkFactory, {"hidden_layers": []}),
-    (DenseQNetworkFactory, {"hidden_layers": [32]}),
-    (DenseQNetworkFactory, {"hidden_layers": [8, 8, 8]}),
-    (ConvQNetworkFactory, {"conv_layers": [{'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [32]}),
-    (ConvQNetworkFactory, {"conv_layers": [{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [32]}),
-    (ConvQNetworkFactory, {"conv_layers": [{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [8, 8, 8]}),
-    (ConvQNetworkFactory, {"conv_layers": [{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [8, 8, 8]}),
-    (ConvQNetworkFactory, {"conv_layers": [], "dense_layers": [8, 8, 8]}),
-    (ConvQNetworkFactory, {"conv_layers": [], "dense_layers": []}),
+    (DenseQNetworkFactory, {"hidden_layers": ()}),
+    (DenseQNetworkFactory, {"hidden_layers": (32, 16)}),
+    (DenseQNetworkFactory, {"hidden_layers": (8, 8, 8)}),
+    (ConvQNetworkFactory, {"conv_layers": ({'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1},), "dense_layers": (32,)},),
+    (ConvQNetworkFactory, {"conv_layers": ({'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},), "dense_layers": (32,)},),
+    (ConvQNetworkFactory, {"conv_layers": ({'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},), "dense_layers": (8, 8, 8)},),
+    (ConvQNetworkFactory, {"conv_layers": ({'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}, {'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}), "dense_layers": (8, 8, 8)},),
+    (ConvQNetworkFactory, {"conv_layers": (), "dense_layers": (8, 8, 8)},),
+    (ConvQNetworkFactory, {"conv_layers": (), "dense_layers": ()},),
 ])
 def test_agent_save_load(factory_class, factory_params):
     # Create small environment
@@ -34,7 +34,7 @@ def test_agent_save_load(factory_class, factory_params):
     # Create agent
     factory = factory_class(
         obs_shape=env.observation_space.shape,
-        action_shape=env.action_space.n,
+        action_shape=(env.action_space.n,),
         **factory_params
     )
     agent = DQNAgent(
@@ -63,6 +63,7 @@ def test_agent_save_load(factory_class, factory_params):
     with tempfile.NamedTemporaryFile(suffix='.safetensors', delete=False) as f:
         agent.save(f.name)
         saved_path = f.name
+    print(f.name)
 
     # Create new agent and load weights
     new_agent = DQNAgent(
@@ -93,9 +94,9 @@ def test_agent_save_load(factory_class, factory_params):
 if __name__ == "__main__":
     test_agent_save_load(
         ConvQNetworkFactory,
-        {"conv_layers": [{'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [32]}
+        {"conv_layers": ({'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}), "dense_layers": (32,)}
     )
     test_agent_save_load(
         DenseQNetworkFactory,
-        {"hidden_layers": [32]}
+        {"hidden_layers": (32,)}
     )

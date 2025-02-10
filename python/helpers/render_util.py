@@ -64,7 +64,7 @@ def render_video(
     agents = {drone.index: RandomAgent(env) for drone in env.drones}
     agents[0] = DQNAgent(
         env=env,
-        dqn_factory=DenseQNetworkFactory(env, hidden_layers=[32] * 2),
+        dqn_factory=DenseQNetworkFactory(env, (env.action_space.n,) hidden_layers=(32,) * 2),
         gamma=0.95,
         epsilon_start=1.0,
         epsilon_decay=0.999,

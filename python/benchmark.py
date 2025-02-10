@@ -90,8 +90,8 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
             env=imp.env,
             dqn_factory=DenseQNetworkFactory(
                 imp.env.observation_space.shape,
-                imp.env.action_space.n,
-                hidden_layers=[16] * 2
+                (imp.env.action_space.n,),
+                hidden_layers=(16) * 2
             ),
             gamma=0.95,
             epsilon_start=1.0,

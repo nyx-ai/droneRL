@@ -1,4 +1,4 @@
-import random
+from typing import Tuple, Dict
 from collections import defaultdict, Counter
 from collections import deque
 
@@ -46,9 +46,9 @@ class DenseQNetwork(QNetwork):
     The network flattens the obs/action spaces and adds dense layers in between
     """
 
-    def __init__(self, obs_shape, action_shape, hidden_layers=[]):
+    def __init__(self, obs_shape, action_shape, hidden_layers=()):
         assert isinstance(obs_shape, tuple), 'Observation space should be a tuple'
-        assert isinstance(action_shape, int), 'Action space should be an integer'
+        assert isinstance(action_shape, tuple), 'Action space should be a tuple'
 
         # Create network
         super().__init__()
@@ -57,7 +57,7 @@ class DenseQNetwork(QNetwork):
         self.dense_layers = hidden_layers
 
         self.network = nn.Sequential()
-        hidden_layers = hidden_layers + [self.output_size]
+        hidden_layers = hidden_layers + self.output_size
         for i, hidden_size in enumerate(hidden_layers):
             # Create layer
             in_features = self.input_size if i == 0 else hidden_layers[i - 1]
@@ -82,9 +82,14 @@ class ConvQNetwork(QNetwork):
     A convolutional Q-network with conv + dense architecture
     """
 
-    def __init__(self, obs_shape, action_shape, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], dense_layers=[]):
+    def __init__(
+            self,
+            obs_shape: Tuple[int, ...],
+            action_shape: Tuple[int],
+            conv_layers: Tuple[Dict[str, int], ...] = ({'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},),
+            dense_layers: Tuple[int, ...] = ()):
         assert isinstance(obs_shape, tuple), 'Observation space should be a tuple'
-        assert isinstance(action_shape, int), 'Action space should be an integer'
+        assert isinstance(action_shape, tuple), 'Action space should be a tuple'
 
         # Create network
         super().__init__()
@@ -114,7 +119,7 @@ class ConvQNetwork(QNetwork):
             [1, self.input_shape[2], self.input_shape[0], self.input_shape[1]])).shape
 
         # Dense layers
-        dense_layers = self.dense_layers + [self.output_size]
+        dense_layers = self.dense_layers + self.output_size
         for dense_i, dense_layer in enumerate(dense_layers):
             # Create layer
             in_features = flatsize if dense_i == 0 else dense_layers[dense_i - 1]
@@ -153,6 +158,8 @@ class BaseDQNFactory():
     def from_checkpoint(cls, path):
         with safe_open(path, framework="pt", device="cpu") as f:
             metadata = f.metadata()
+            if metadata.get('checkpoint_format') == 'jax':
+                raise Exception(f'The loaded checkpoint {path} is a JAX checkpoint and not compatible')
             if metadata["network_type"] == "dense":
                 return DenseQNetworkFactory.from_checkpoint(path)
             elif metadata["network_type"] == "conv":
@@ -166,7 +173,13 @@ class DenseQNetworkFactory(BaseDQNFactory):
     A Q-network factory for dense Q-networks
     """
 
-    def __init__(self, obs_shape, action_shape, hidden_layers=[], learning_rate: float = 1e-3, state_dict=None):
+    def __init__(
+            self,
+            obs_shape: Tuple[int, ...],
+            action_shape: Tuple[int],
+            hidden_layers: Tuple[int, ...] = (),
+            learning_rate: float = 1e-3,
+            state_dict=None):
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.dense_layers = hidden_layers
@@ -288,12 +301,12 @@ class DQNAgent():
             "action_shape": str(self.dqn_factory.action_shape),
         }
         if hasattr(self.dqn_factory, 'conv_layers'):
-            metadata["conv_layers"] = str([{
+            metadata["conv_layers"] = str(tuple({
                 'out_channels': layer['out_channels'],
                 'kernel_size': layer['kernel_size'],
                 'stride': layer['stride'],
                 'padding': layer['padding']
-            } for layer in self.dqn_factory.conv_layers])
+            } for layer in self.dqn_factory.conv_layers))
         save_file(state_dict, path, metadata=metadata)
 
     def load(self, path):
