@@ -29,10 +29,10 @@ class DroneRacerEvaluator:
         self.EPISODE_SEEDS = [845, 99, 65, 96, 85, 39, 51, 17, 52, 35]
         self.TOTAL_EPISODE_STEPS = 1000
         self.participating_agents = {
-            "baseline-2": "sample_models/dqn-agent-1.safetensors",
-            "baseline-3": "sample_models/dqn-agent-2.safetensors",
-            "baseline-4": "sample_models/dqn-agent-3.safetensors",
-            "baseline-5": "sample_models/dqn-agent-4.safetensors",
+            "baseline-1": "sample_models/dqn-agent-1.safetensors",
+            "baseline-2": "sample_models/dqn-agent-2.safetensors",
+            "baseline-3": "sample_models/dqn-agent-3.safetensors",
+            "baseline-4": "sample_models/dqn-agent-4.safetensors",
             "baseline-5": "sample_models/dqn-agent-5.safetensors",
         }
 
