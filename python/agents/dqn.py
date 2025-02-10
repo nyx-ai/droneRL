@@ -51,9 +51,7 @@ class DenseQNetwork(QNetwork):
         assert isinstance(action_shape, int), 'Action space should be an integer'
 
         # Create network
-        super().__init__()  # Initialize module
-        # self.env = env  # Save environment
-
+        super().__init__()
         self.input_size = reduce(op.mul, obs_shape, 1)
         self.output_size = action_shape
         self.dense_layers = hidden_layers
@@ -89,8 +87,7 @@ class ConvQNetwork(QNetwork):
         assert isinstance(action_shape, int), 'Action space should be an integer'
 
         # Create network
-        super().__init__()  # Initialize module
-
+        super().__init__()
         self.input_shape = obs_shape
         self.output_size = action_shape
         self.conv_layers = conv_layers
