@@ -11,6 +11,7 @@ import torch.optim as optim
 from torch import Tensor, LongTensor
 import os
 from safetensors.torch import save_file, safe_open
+import ast
 
 from .logging import Logger, NoLogger
 
@@ -76,15 +77,11 @@ class ConvQNetwork(nn.Module):
     A convolutional Q-network with conv + dense architecture
     """
 
-    def __init__(self, env, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}],
-                 dense_layers=[]):
+    def __init__(self, env, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], dense_layers=[]):
         # Action space and observation spaces should by OpenAI gym spaces
-        isinstance(env.observation_space,
-                   spaces.Box), 'Observation space should be a OpenAI Gym "Box" 3d space'
-        isinstance(env.action_space,
-                   spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
-        assert len(
-            env.observation_space.shape) == 3, 'Observation space should be a OpenAI Gym "Box" 3d space'
+        isinstance(env.observation_space, spaces.Box), 'Observation space should be a OpenAI Gym "Box" 3d space'
+        isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
+        assert len(env.observation_space.shape) == 3, 'Observation space should be a OpenAI Gym "Box" 3d space'
 
         # Create network
         super().__init__()  # Initialize module
@@ -161,7 +158,7 @@ class DenseQNetworkFactory(DQNFactoryTemplate):
         self.dense_layers = hidden_layers
         self.learning_rate = learning_rate
 
-    def create_qnetwork(self, target_qnetwork):
+    def create_qnetwork(self):
         network = DenseQNetwork(self.env, self.dense_layers)
         optimizer = optim.Adam(network.parameters(), lr=self.learning_rate)
         return network, optimizer
@@ -174,20 +171,17 @@ class ConvQNetworkFactory(DQNFactoryTemplate):
 
     def __init__(self, env, conv_layers=None, dense_layers=None):
         self.env = env
-        # Set default conv layer if none provided
-        self.conv_layers = conv_layers or [
-            {'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}]
-        self.dense_layers = dense_layers or []
+        self.conv_layers = conv_layers
+        self.dense_layers = dense_layers
 
         # Validate conv layers have required parameters
         for layer in self.conv_layers:
             required = {'out_channels', 'kernel_size', 'stride', 'padding'}
             missing = required - set(layer.keys())
             if missing:
-                raise ValueError(
-                    f"Conv layer missing required parameters: {missing}")
+                raise ValueError(f"Conv layer missing required parameters: {missing}")
 
-    def create_qnetwork(self, target_qnetwork):
+    def create_qnetwork(self):
         network = ConvQNetwork(self.env, self.conv_layers, self.dense_layers)
         optimizer = optim.Adam(network.parameters())
         return network, optimizer
@@ -219,10 +213,8 @@ class DQNAgent():
 
     def reset(self):
         # Create networks with episode counter to know when to update them
-        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork(
-            target_qnetwork=False)
-        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork(
-            target_qnetwork=True)
+        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork()
+        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork()
         self.num_episode = 0
         self.episode_reward = 0
         self.total_steps = 0
@@ -258,16 +250,17 @@ class DQNAgent():
             for k, v in f.metadata().items():
                 metadata[k] = v
 
+        dense_layers = ast.literal_eval(metadata["dense_layers"])
         if metadata["network_type"] == "dense":
-            hidden_layers = eval(metadata["dense_layers"])
-            self.dqn_factory = DenseQNetworkFactory(self.env, hidden_layers=hidden_layers)
+            self.dqn_factory = DenseQNetworkFactory(self.env, hidden_layers=dense_layers)
         else:
-            conv_layers = eval(metadata["conv_layers"])
-            dense_layers = eval(metadata["dense_layers"])
+            conv_layers = ast.literal_eval(metadata["conv_layers"])
             self.dqn_factory = ConvQNetworkFactory(self.env, conv_layers=conv_layers, dense_layers=dense_layers)
 
-        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork(target_qnetwork=False)
-        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork(target_qnetwork=True)
+        self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork()
+        self.target_qnetwork, _ = self.dqn_factory.create_qnetwork()
+
+        print(loaded.items())
 
         # TODO save and validate
         # assert self.qnetwork.input_size == int(metadata["input_size"]), "Input size mismatch"

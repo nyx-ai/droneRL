@@ -67,11 +67,9 @@ class DeliveryDrones(Env):
         return positions_dict, available_pos
 
     def reset(self, seed=0):
-        # print("Resetting env...")
         self.reset_items()
 
-        self.side_size = int(math.ceil(
-            math.sqrt(self.env_params['n_drones'] / self.env_params['drone_density'])))
+        self.side_size = int(math.ceil(math.sqrt(self.env_params['n_drones'] / self.env_params['drone_density'])))
         self.shape = (self.side_size, self.side_size)
 
         # Create elements of the grid

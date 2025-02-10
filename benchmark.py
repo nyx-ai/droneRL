@@ -2,20 +2,17 @@ import statistics
 import time
 from dataclasses import dataclass
 
+import gym.spaces as spaces
 import numpy as np
 from tqdm import tqdm
 from tabulate import tabulate
 import matplotlib.pyplot as plt
 
-from env.v1.env import DeliveryDrones as DeliveryDronesV1
-from env.v1.wrappers import WindowedGridView as WindowedGridViewV1
-from env.v2.env import DeliveryDrones as DeliveryDronesV2
-from env.v2.wrappers import WindowedGridView as WindowedGridViewV2
-from env.v3.env import DeliveryDrones as DeliveryDronesV3
-from env.v3.wrappers import WindowedGridView as WindowedGridViewV3
+from python.env.env import DeliveryDrones as DeliveryDronesV3
+from python.env.wrappers import WindowedGridView as WindowedGridViewV3
 
-from agents.dqn import DQNAgent, DenseQNetworkFactory
-from agents.random import RandomAgent
+from python.agents.dqn import DQNAgent, DenseQNetworkFactory
+from python.agents.random import RandomAgent
 
 
 @dataclass
@@ -32,7 +29,7 @@ class Config:
 
 
 # CONFIG #
-train = True
+train = False
 n_steps = 25
 # drone_counts = [3]
 drone_counts = [32, 128, 512, 2048]
@@ -97,6 +94,7 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
     states = imp.env.reset()
     # print(imp.env.render(mode='ansi'))
 
+    rewards_log = {}
     if train:
         agents = {drone.index: RandomAgent(imp.env) for drone in imp.env.drones}
         rewards_log = {key: [] for key in agents.keys()}
@@ -152,8 +150,10 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
     mean_time_env = (total_time_env / n_steps) * 1000
     mean_time_lean = (total_time_learn / n_steps) * 1000
 
-    reward_trained = statistics.mean(rewards_log[0][-100:])
-    reward_untrained = statistics.mean(rewards_log[1][-100:])
+    reward_trained, reward_untrained = "-", "-"
+    if train:
+        reward_trained = statistics.mean(rewards_log[0][-100:])
+        reward_untrained = statistics.mean(rewards_log[1][-100:])
 
     # Identify reference time for comparison
     key = (config.name, n_drones)

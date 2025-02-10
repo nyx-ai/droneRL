@@ -83,3 +83,7 @@ def test_agent_save_load(factory_class, factory_params):
 
     assert actions == new_actions, "Actions before and after loading should be identical"
     print("Actions before and after loading are identical")
+
+
+if __name__ == "__main__":
+    test_agent_save_load(DenseQNetworkFactory, {"hidden_layers": [32]})
