@@ -30,6 +30,7 @@ if device is None:
         device = 'cpu'
 print(device)
 
+
 class QNetwork(nn.Module):
     """
     A Q-network for OpenAI Gym Environments
@@ -37,6 +38,7 @@ class QNetwork(nn.Module):
 
     def forward(self, states):
         raise NotImplementedError
+
 
 class DenseQNetwork(QNetwork):
     """
@@ -150,8 +152,8 @@ class BaseDQNFactory():
         raise NotImplementedError
 
     # static method creating appropriate instance based on safetensors metadata
-    @staticmethod
-    def from_checkpoint(path):
+    @classmethod
+    def from_checkpoint(cls, path):
         with safe_open(path, framework="pt", device="cpu") as f:
             metadata = f.metadata()
             if metadata["network_type"] == "dense":

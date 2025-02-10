@@ -59,7 +59,6 @@ class DeliveryDrones(Env):
         self._skyscrapers = {}
 
     def spawn_objects(self, available_pos, num_obj):
-        print(f"Spawning {num_obj} objects in {len(available_pos)} positions")
         positions_dict = {}
         random.shuffle(available_pos)
         for _ in range(num_obj):

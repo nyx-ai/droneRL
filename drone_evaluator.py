@@ -4,14 +4,13 @@ import numpy as np
 import torch
 import tqdm
 
-from python.env.env import DeliveryDrones as DeliveryDrones
-from python.env.wrappers import WindowedGridView as WindowedGridView
+from python.env.env import DeliveryDrones
+from python.env.wrappers import WindowedGridView
 from python.helpers.rl_helpers import set_seed
 from PIL import Image
 import tempfile
 import aicrowd_helpers
-from safetensors.torch import load_file
-from python.agents.dqn import DenseQNetwork
+from python.agents.dqn import BaseDQNFactory
 
 
 class DroneRacerEvaluator:
@@ -25,25 +24,32 @@ class DroneRacerEvaluator:
         self.round = round
 
         ################################################
-        ################################################
         # Evaluation State Variables
         ################################################
         self.EPISODE_SEEDS = [845, 99, 65, 96, 85, 39, 51, 17, 52, 35]
         self.TOTAL_EPISODE_STEPS = 1000
         self.participating_agents = {
-            "baseline-1": "baseline_models/dqn-agent-1.safetensors",
-            "baseline-2": "baseline_models/dqn-agent-2.safetensors",
-            "baseline-3": "baseline_models/dqn-agent-3.safetensors",
-            "baseline-4": "baseline_models/dqn-agent-4.safetensors",
-            "baseline-5": "baseline_models/dqn-agent-5.safetensors",
+            "baseline-2": "sample_models/dqn-agent-1.safetensors",
+            "baseline-3": "sample_models/dqn-agent-2.safetensors",
+            "baseline-4": "sample_models/dqn-agent-3.safetensors",
+            "baseline-5": "sample_models/dqn-agent-4.safetensors",
+            "baseline-5": "sample_models/dqn-agent-5.safetensors",
         }
 
         self.video_directory_path = tempfile.mkdtemp()
 
         ################################################
+        # Load Baseline models
         ################################################
-        # Helper Functions
-        ################################################
+        self.loaded_agent_models = {}
+        for _item in self.participating_agents.keys():
+            agent_path = os.path.join(answer_folder_path, self.participating_agents[_item])
+            self.loaded_agent_models[_item] = BaseDQNFactory.from_checkpoint(agent_path).create_qnetwork()[0]
+        # Baseline Models loaded !! Yayy !!
+
+    ################################################
+    # Helper Functions
+    ################################################
 
     def agent_id(self, agent_name):
         """
@@ -82,130 +88,90 @@ class DroneRacerEvaluator:
         print("Video Directory Path : ", self.video_directory_path)
 
         ################################################
-        ################################################
         # Load submission model
         ################################################
 
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device('cpu')
-        
-        # Create environment
-        # (env is already created below: env = WindowedGridView(...))
-        
-        env_params = {  # Updates to the default params have to be added after this instantiation
-            'charge_reward': -0.1,
-            'crash_reward': -1,
-            'delivery_reward': 1,
-            'charge': 20,
-            'discharge': 10,
-            'drone_density': 0.05,
-            'dropzones_factor': 2,
-            'n_drones': 3,
-            'packets_factor': 3,
-            'pickup_reward': 0,
-            'rgb_render_rescale': 1.0,
-            'skyscrapers_factor': 3,
-            'stations_factor': 2
-        }
-        env_params["n_drones"] = len(self.participating_agents.keys())
-        env_params["rgb_render_rescale"] = 2.0  # large video - florian's request
-
-        env = WindowedGridView(DeliveryDrones(env_params), radius=3)
-        # Load baseline agents using safetensors
-        baseline_agents = {}
-        for agent_name, agent_path in self.participating_agents.items():
-            if agent_name != "YOU":
-                full_path = os.path.join(self.answer_folder_path, agent_path)
-                loaded = load_file(full_path)
-                
-                # Extract metadata and state dict
-                metadata = {}
-                state_dict = {}
-                for key, value in loaded.items():
-                    if key.startswith("_metadata_"):
-                        metadata[key[10:]] = value
-                    else:
-                        state_dict[key] = value
-                
-                # Create appropriate network based on metadata
-                if metadata["network_type"] == "dense":
-                    hidden_layers = eval(metadata["hidden_layers"])
-                    net = DenseQNetwork(env, hidden_layers=hidden_layers)
-                else:
-                    conv_layers = eval(metadata["conv_layers"])
-                    net = ConvQNetwork(env, conv_layers=conv_layers)
-                
-                # Verify dimensions match
-                assert net.input_size == int(metadata["input_size"]), f"Input size mismatch for {agent_name}"
-                assert net.output_size == int(metadata["output_size"]), f"Output size mismatch for {agent_name}"
-                
-                net.load_state_dict(state_dict)
-                baseline_agents[agent_name] = net
-
-        # Load submission agent
-        loaded = load_file(submission_file_path)
-        
-        # Extract metadata and state dict
-        metadata = {}
-        state_dict = {}
-        for key, value in loaded.items():
-            if key.startswith("_metadata_"):
-                metadata[key[10:]] = value
-            else:
-                state_dict[key] = value
-        
-        # Create appropriate network based on metadata
-        if metadata["network_type"] == "dense":
-            hidden_layers = eval(metadata["hidden_layers"])
-            submission_model = DenseQNetwork(env, hidden_layers=hidden_layers)
-        else:
-            conv_layers = eval(metadata["conv_layers"])
-            submission_model = ConvQNetwork(env, conv_layers=conv_layers)
-        
-        # Verify dimensions match
-        assert submission_model.input_size == int(metadata["input_size"]), "Submission input size mismatch"
-        assert submission_model.output_size == int(metadata["output_size"]), "Submission output size mismatch"
-        
-        submission_model.load_state_dict(state_dict)
-        self.participating_agents["YOU"] = submission_model
+        model = BaseDQNFactory.from_checkpoint(submission_file_path).create_qnetwork()[0]
+        self.participating_agents["YOU"] = model
+        self.loaded_agent_models["YOU"] = model
 
         self.overall_scores = []
 
         for _episode_idx, episode_seed in enumerate(self.EPISODE_SEEDS):
-            ################################################
             ################################################
             # Run Episode
             ################################################
             episode_scores = np.zeros(len(self.participating_agents.keys()))
 
             ################################################
-            ################################################
             # Env Instantiation
             ################################################
+            env_params = {  # Updates to the default params have to be added after this instantiation
+                'charge_reward': -0.1,
+                'crash_reward': -1,
+                'delivery_reward': 1,
+                'charge': 20,
+                'discharge': 10,
+                'drone_density': 0.05,
+                'dropzones_factor': 2,
+                'n_drones': 3,
+                'packets_factor': 3,
+                'pickup_reward': 0,
+                'rgb_render_rescale': 1.0,
+                'skyscrapers_factor': 3,
+                'stations_factor': 2
+            }
+            env_params["n_drones"] = len(self.participating_agents.keys())
+            env_params["rgb_render_rescale"] = 2.0  # large video - florian's request
+
+            env = WindowedGridView(DeliveryDrones(env_params), radius=3)
             set_seed(env, episode_seed)  # Seed
 
             agent_name_mappings = self.get_agent_name_mapping()
             env.env_params["player_name_mappings"] = agent_name_mappings
 
             # Gather First Obeservation (state)
-            state, _ = env.reset()
+            state = env.reset()
 
             # Episode step loop
             for _step in tqdm.tqdm(range(self.TOTAL_EPISODE_STEPS)):
                 _action_dictionary = {}
 
                 ################################################
-                ################################################
                 # Act on the Env (all agents, one after the other)
                 ################################################
                 for _idx, _agent_name in enumerate(sorted(self.participating_agents.keys())):
-                    agent = submission_model if _agent_name == "YOU" else baseline_agents[_agent_name]
+                    agent = self.loaded_agent_models[_agent_name]
+
+                    ################################################
+                    # Gather observation
+                    ################################################
                     state_agent = state[_idx]
+
+                    ################################################
+                    # Decide action of the participating agent
+                    ################################################
                     q_values = agent([state_agent])[0]
                     action = q_values.argmax().item()
+
                     _action_dictionary[_idx] = action
+                    ################################################
+                    # Collect frames for the first episode to generate video
+                    ################################################
+                    if _episode_idx == 0:
+                        if _step < 60:
+                            # Use only the first 60 frames for video generation
+                            # Record videos with env.render
+                            # Do it in a tempfile
+                            # Compile frames into a video (from flatland)
+
+                            # TODO actual env image generation
+                            _step_frame_im = Image.fromarray(np.random.randint(low=0, high=255, size=(250, 250), dtype=np.uint8))
+                            # _step_frame_im = Image.fromarray(env.render(mode='rgb_array'))
+                            _step_frame_im.save("{}/{}.jpg".format(self.video_directory_path, str(_step).zfill(4)))
 
                 # Perform action (on all agents)
-                state, rewards, done, done, info = env.step(_action_dictionary)
+                state, rewards, _, _, _ = env.step(_action_dictionary)
 
                 # Gather rewards for all agents (inside episode_score)
                 _step_score = np.array(list(rewards.values()))  # Check with florian about ordering
@@ -224,8 +190,6 @@ class DroneRacerEvaluator:
         print("Videos : ", video_output_path, video_thumb_output_path)
 
         # Aggregate all scores into an overall score
-        # TODO : Add aggregation function (lets start with simple mean + std)
-
         self.overall_scores = np.array(self.overall_scores)
         # Compute participant means and stds across episodes
         _score = self.overall_scores.mean(axis=0)
@@ -256,7 +220,7 @@ if __name__ == "__main__":
     # and a sample submission is present at data/sample_submission.csv
     answer_file_path = "."
     _client_payload = {}
-    _client_payload["submission_file_path"] = "baseline_models/dqn-agent.pt"
+    _client_payload["submission_file_path"] = "sample_models/dqn-agent-1.safetensors"
     _client_payload["aicrowd_submission_id"] = 1123
     _client_payload["aicrowd_participant_id"] = 1234
 

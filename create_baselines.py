@@ -22,14 +22,15 @@ def create_baseline_models(num_models=5, num_steps=1000):
     env = WindowedGridView(DeliveryDrones(env_params), radius=3)
 
     # Create factory with different architectures for each baseline
+    obs_shape = env.observation_space.shape
+    action_shape = env.action_space.n
     factories = [
-        DenseQNetworkFactory(env, hidden_layers=[32]),
-        DenseQNetworkFactory(env, hidden_layers=[64]),
-        DenseQNetworkFactory(env, hidden_layers=[32, 32]),
-        DenseQNetworkFactory(env, hidden_layers=[64, 32]),
-        DenseQNetworkFactory(env, hidden_layers=[64, 64]),
-        ConvQNetworkFactory(env, conv_layers=[
-                            {'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], dense_layers=[8, 8, 8])
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[32]),
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[64]),
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[32, 32]),
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[64, 32]),
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[64, 64]),
+        ConvQNetworkFactory(obs_shape, action_shape, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], dense_layers=[8, 8, 8])
     ]
 
     # Create and save models
@@ -77,7 +78,7 @@ def create_baseline_models(num_models=5, num_steps=1000):
 
         # Save model
         save_path = os.path.join(os.path.dirname(
-            __file__), 'baseline_models', f'dqn-agent-{i+1}.safetensors')
+            __file__), 'sample_models', f'dqn-agent-{i+1}.safetensors')
         agent.save(save_path)
         print(f"Saved model {i+1} to {save_path}")
         print(
@@ -86,10 +87,14 @@ def create_baseline_models(num_models=5, num_steps=1000):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Create baseline DQN models')
-    parser.add_argument('--num-models', type=int, default=5,
-                        help='Number of baseline models to create')
-    parser.add_argument('--num-steps', type=int, default=1000,
-                        help='Number of training steps per model')
+    parser.add_argument(
+        '--num-models', type=int, default=5,
+        help='Number of baseline models to create'
+    )
+    parser.add_argument(
+        '--num-steps', type=int, default=1000,
+        help='Number of training steps per model'
+    )
     args = parser.parse_args()
 
     create_baseline_models(args.num_models, args.num_steps)
