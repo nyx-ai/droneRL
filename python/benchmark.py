@@ -2,17 +2,16 @@ import statistics
 import time
 from dataclasses import dataclass
 
-import gym.spaces as spaces
 import numpy as np
 from tqdm import tqdm
 from tabulate import tabulate
 import matplotlib.pyplot as plt
 
-from python.env.env import DeliveryDrones as DeliveryDronesV3
-from python.env.wrappers import WindowedGridView as WindowedGridViewV3
+from env.env import DeliveryDrones
+from env.wrappers import WindowedGridView
 
-from python.agents.dqn import DQNAgent, DenseQNetworkFactory
-from python.agents.random import RandomAgent
+from agents.dqn import DQNAgent, DenseQNetworkFactory
+from agents.random import RandomAgent
 
 
 @dataclass
@@ -29,9 +28,8 @@ class Config:
 
 
 # CONFIG #
-train = False
-n_steps = 25
-# drone_counts = [3]
+train = True
+n_steps = 100
 drone_counts = [32, 128, 512, 2048]
 
 configs = [
@@ -50,23 +48,13 @@ configs = [
 ]
 
 impls = [
-    # Impl(
-    #     name="v1",
-    #     env=WindowedGridViewV1(DeliveryDronesV1(), radius=3),
-    #     desc="original 2020 version"
-    # ),
-    # Impl(
-    #     name="v2",
-    #     env=WindowedGridViewV2(DeliveryDronesV2(), radius=3),
-    #     desc="2020 grid-based version using constants instead of objects for what's on the map"
-    # ),
     Impl(
         name="v3",
-        env=WindowedGridViewV3(DeliveryDronesV3(), radius=3),
+        env=WindowedGridView(DeliveryDrones(), radius=3),
         desc="dict-based version"
     ),
 ]
-# CONFIG #
+# /CONFIG #
 
 results = []
 reference_speeds = {}
@@ -101,12 +89,13 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
         agents[0] = DQNAgent(
             env=imp.env,
             dqn_factory=DenseQNetworkFactory(
-                imp.env,
+                imp.env.observation_space.shape,
+                imp.env.action_space.n,
                 hidden_layers=[16] * 2
             ),
             gamma=0.95,
             epsilon_start=1.0,
-            epsilon_decay=0.01 ** (2 / n_steps),  # decay to 0.01 after half of the steps
+            epsilon_decay=0.01 ** (2 / n_steps),
             epsilon_end=0.01,
             memory_size=10_000_000,
             batch_size=32,

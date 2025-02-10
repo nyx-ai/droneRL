@@ -12,6 +12,8 @@ from torch import Tensor, LongTensor
 import os
 from safetensors.torch import save_file, safe_open
 import ast
+import operator as op
+from functools import reduce
 
 from .logging import Logger, NoLogger
 
@@ -28,24 +30,30 @@ if device is None:
         device = 'cpu'
 print(device)
 
+class QNetwork(nn.Module):
+    """
+    A Q-network for OpenAI Gym Environments
+    """
 
-class DenseQNetwork(nn.Module):
+    def forward(self, states):
+        raise NotImplementedError
+
+class DenseQNetwork(QNetwork):
     """
     A dense Q-network for OpenAI Gym Environments
     The network flattens the obs/action spaces and adds dense layers in between
     """
 
-    def __init__(self, env, hidden_layers=[]):
-        # Action space and observation spaces should be OpenAI gym spaces
-        assert isinstance(env.observation_space, spaces.Space), 'Observation space should be an OpenAI Gym space'
-        assert isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
+    def __init__(self, obs_shape, action_shape, hidden_layers=[]):
+        assert isinstance(obs_shape, tuple), 'Observation space should be a tuple'
+        assert isinstance(action_shape, int), 'Action space should be an integer'
 
         # Create network
         super().__init__()  # Initialize module
-        self.env = env  # Save environment
+        # self.env = env  # Save environment
 
-        self.input_size = spaces.flatdim(self.env.observation_space)
-        self.output_size = self.env.action_space.n
+        self.input_size = reduce(op.mul, obs_shape, 1)
+        self.output_size = action_shape
         self.dense_layers = hidden_layers
 
         self.network = nn.Sequential()
@@ -53,7 +61,7 @@ class DenseQNetwork(nn.Module):
         for i, hidden_size in enumerate(hidden_layers):
             # Create layer
             in_features = self.input_size if i == 0 else hidden_layers[i - 1]
-            out_features = hidden_layers[i]
+            out_features = hidden_size
             layer = nn.Linear(in_features, out_features)
 
             # Add layer + activation
@@ -65,30 +73,24 @@ class DenseQNetwork(nn.Module):
         self.network.to(device)
 
     def forward(self, states):
-        # Efficient flattening of states and tensor conversion
-        states_flattened = np.array(
-            [spaces.flatten(self.env.observation_space, s) for s in states])
-        states_tensor = torch.Tensor(states_flattened).to(device)
+        states_tensor = torch.Tensor(np.array(states).reshape(-1, self.input_size)).to(device)
         return self.network(states_tensor)
 
 
-class ConvQNetwork(nn.Module):
+class ConvQNetwork(QNetwork):
     """
     A convolutional Q-network with conv + dense architecture
     """
 
-    def __init__(self, env, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], dense_layers=[]):
-        # Action space and observation spaces should by OpenAI gym spaces
-        isinstance(env.observation_space, spaces.Box), 'Observation space should be a OpenAI Gym "Box" 3d space'
-        isinstance(env.action_space, spaces.Discrete), 'Action space should be an OpenAI Gym "Discrete" space'
-        assert len(env.observation_space.shape) == 3, 'Observation space should be a OpenAI Gym "Box" 3d space'
+    def __init__(self, obs_shape, action_shape, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], dense_layers=[]):
+        assert isinstance(obs_shape, tuple), 'Observation space should be a tuple'
+        assert isinstance(action_shape, int), 'Action space should be an integer'
 
         # Create network
         super().__init__()  # Initialize module
-        self.env = env  # Save environment
 
-        self.input_shape = env.observation_space.shape
-        self.output_size = self.env.action_space.n
+        self.input_shape = obs_shape
+        self.output_size = action_shape
         self.conv_layers = conv_layers
         self.dense_layers = dense_layers
         self.network = nn.Sequential()
@@ -138,41 +140,74 @@ class ConvQNetwork(nn.Module):
         return self.network(states_tensor)
 
 
-class DQNFactoryTemplate():
+class BaseDQNFactory():
     """
     A template class to generate custom Q-networks and their optimizers
     """
 
-    def create_qnetwork(self, target_qnetwork):
+    def create_qnetwork(self):
         # Should return network + optimizer
         raise NotImplementedError
 
+    # static method creating appropriate instance based on safetensors metadata
+    @staticmethod
+    def from_checkpoint(path):
+        with safe_open(path, framework="pt", device="cpu") as f:
+            metadata = f.metadata()
+            if metadata["network_type"] == "dense":
+                return DenseQNetworkFactory.from_checkpoint(path)
+            elif metadata["network_type"] == "conv":
+                return ConvQNetworkFactory.from_checkpoint(path)
+            else:
+                raise ValueError(f"Unknown network type: {metadata['network_type']}")
 
-class DenseQNetworkFactory(DQNFactoryTemplate):
+
+class DenseQNetworkFactory(BaseDQNFactory):
     """
     A Q-network factory for dense Q-networks
     """
 
-    def __init__(self, env, hidden_layers=[], learning_rate: float = 1e-3):
-        self.env = env
+    def __init__(self, obs_shape, action_shape, hidden_layers=[], learning_rate: float = 1e-3, state_dict=None):
+        self.obs_shape = obs_shape
+        self.action_shape = action_shape
         self.dense_layers = hidden_layers
         self.learning_rate = learning_rate
+        self.state_dict = state_dict
 
     def create_qnetwork(self):
-        network = DenseQNetwork(self.env, self.dense_layers)
+        network = DenseQNetwork(self.obs_shape, self.action_shape, self.dense_layers)
         optimizer = optim.Adam(network.parameters(), lr=self.learning_rate)
+        if self.state_dict is not None:
+            network.load_state_dict(self.state_dict)
         return network, optimizer
 
+    @staticmethod
+    def from_checkpoint(path):
+        with safe_open(path, framework="pt", device="cpu") as f:
+            metadata = f.metadata()
+            obs_shape = ast.literal_eval(metadata["obs_shape"])
+            action_shape = ast.literal_eval(metadata["action_shape"])
+            hidden_layers = ast.literal_eval(metadata["dense_layers"])
+            state_dict = {k: f.get_tensor(k) for k in f.keys()}
+            return DenseQNetworkFactory(
+                obs_shape=obs_shape,
+                action_shape=action_shape,
+                hidden_layers=hidden_layers,
+                state_dict=state_dict
+            )
 
-class ConvQNetworkFactory(DQNFactoryTemplate):
+
+class ConvQNetworkFactory(BaseDQNFactory):
     """
     A Q-network factory for convolutional Q-networks
     """
 
-    def __init__(self, env, conv_layers=None, dense_layers=None):
-        self.env = env
+    def __init__(self, obs_shape, action_shape, conv_layers=None, dense_layers=None, state_dict=None):
+        self.obs_shape = obs_shape
+        self.action_shape = action_shape
         self.conv_layers = conv_layers
         self.dense_layers = dense_layers
+        self.state_dict = state_dict
 
         # Validate conv layers have required parameters
         for layer in self.conv_layers:
@@ -182,9 +217,28 @@ class ConvQNetworkFactory(DQNFactoryTemplate):
                 raise ValueError(f"Conv layer missing required parameters: {missing}")
 
     def create_qnetwork(self):
-        network = ConvQNetwork(self.env, self.conv_layers, self.dense_layers)
+        network = ConvQNetwork(self.obs_shape, self.action_shape, self.conv_layers, self.dense_layers)
         optimizer = optim.Adam(network.parameters())
+        if self.state_dict is not None:
+            network.load_state_dict(self.state_dict)
         return network, optimizer
+
+    @staticmethod
+    def from_checkpoint(path):
+        with safe_open(path, framework="pt", device="cpu") as f:
+            metadata = f.metadata()
+            conv_layers = ast.literal_eval(metadata["conv_layers"])
+            dense_layers = ast.literal_eval(metadata["dense_layers"])
+            obs_shape = ast.literal_eval(metadata["obs_shape"])
+            action_shape = ast.literal_eval(metadata["action_shape"])
+            state_dict = {k: f.get_tensor(k) for k in f.keys()}
+            return ConvQNetworkFactory(
+                obs_shape=obs_shape,
+                action_shape=action_shape,
+                conv_layers=conv_layers,
+                dense_layers=dense_layers,
+                state_dict=state_dict
+            )
 
 
 class DQNAgent():
@@ -231,6 +285,8 @@ class DQNAgent():
         metadata = {
             "network_type": "dense" if isinstance(self.qnetwork, DenseQNetwork) else "conv",
             "dense_layers": str(self.dqn_factory.dense_layers),
+            "obs_shape": str(self.dqn_factory.obs_shape),
+            "action_shape": str(self.dqn_factory.action_shape),
         }
         if hasattr(self.dqn_factory, 'conv_layers'):
             metadata["conv_layers"] = str([{
@@ -242,32 +298,9 @@ class DQNAgent():
         save_file(state_dict, path, metadata=metadata)
 
     def load(self, path):
-        loaded = {}
-        metadata = {}
-        with safe_open(path, framework="pt", device="cpu") as f:
-            for key in f.keys():
-                loaded[key] = f.get_tensor(key)
-            for k, v in f.metadata().items():
-                metadata[k] = v
-
-        dense_layers = ast.literal_eval(metadata["dense_layers"])
-        if metadata["network_type"] == "dense":
-            self.dqn_factory = DenseQNetworkFactory(self.env, hidden_layers=dense_layers)
-        else:
-            conv_layers = ast.literal_eval(metadata["conv_layers"])
-            self.dqn_factory = ConvQNetworkFactory(self.env, conv_layers=conv_layers, dense_layers=dense_layers)
-
+        self.dqn_factory = BaseDQNFactory.from_checkpoint(path)
         self.qnetwork, self.optimizer = self.dqn_factory.create_qnetwork()
         self.target_qnetwork, _ = self.dqn_factory.create_qnetwork()
-
-        print(loaded.items())
-
-        # TODO save and validate
-        # assert self.qnetwork.input_size == int(metadata["input_size"]), "Input size mismatch"
-        # assert self.qnetwork.output_size == int(metadata["output_size"]), "Output size mismatch"
-
-        self.qnetwork.load_state_dict(loaded)
-        self.target_qnetwork.load_state_dict(loaded)
 
     def act(self, state):
         # Exploration rate

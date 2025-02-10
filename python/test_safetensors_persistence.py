@@ -1,12 +1,11 @@
 import os
-import sys
 import tempfile
 
 import pytest
 
 from env.env import DeliveryDrones
 from env.wrappers import WindowedGridView
-from agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
+from agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory, BaseDQNFactory
 
 
 @pytest.mark.parametrize("factory_class,factory_params", [
@@ -32,7 +31,11 @@ def test_agent_save_load(factory_class, factory_params):
     env = WindowedGridView(DeliveryDrones(env_params), radius=2)
 
     # Create agent
-    factory = factory_class(env, **factory_params)
+    factory = factory_class(
+        obs_shape=env.observation_space.shape,
+        action_shape=env.action_space.n,
+        **factory_params
+    )
     agent = DQNAgent(
         env=env,
         dqn_factory=factory,
@@ -63,7 +66,7 @@ def test_agent_save_load(factory_class, factory_params):
     # Create new agent and load weights
     new_agent = DQNAgent(
         env=env,
-        dqn_factory=factory,
+        dqn_factory=BaseDQNFactory.from_checkpoint(saved_path),
         gamma=0.99,
         epsilon_start=0,
         epsilon_decay=1,
@@ -72,7 +75,6 @@ def test_agent_save_load(factory_class, factory_params):
         batch_size=32,
         target_update_interval=100
     )
-    new_agent.load(saved_path)
 
     # Verify actions are the same
     new_actions = []
@@ -86,4 +88,11 @@ def test_agent_save_load(factory_class, factory_params):
 
 
 if __name__ == "__main__":
-    test_agent_save_load(DenseQNetworkFactory, {"hidden_layers": [32]})
+    test_agent_save_load(
+        ConvQNetworkFactory,
+        {"conv_layers": [{'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [32]}
+    )
+    test_agent_save_load(
+        DenseQNetworkFactory,
+        {"hidden_layers": [32]}
+    )

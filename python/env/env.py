@@ -59,6 +59,7 @@ class DeliveryDrones(Env):
         self._skyscrapers = {}
 
     def spawn_objects(self, available_pos, num_obj):
+        print(f"Spawning {num_obj} objects in {len(available_pos)} positions")
         positions_dict = {}
         random.shuffle(available_pos)
         for _ in range(num_obj):
@@ -74,18 +75,12 @@ class DeliveryDrones(Env):
 
         # Create elements of the grid
         num_drones = self.env_params['n_drones']
-        num_skyscrapers = self.env_params['skyscrapers_factor'] * \
-            self.env_params['n_drones']
-        num_packets = self.env_params['packets_factor'] * \
-            self.env_params['n_drones']
-        num_dropzone = self.env_params['dropzones_factor'] * \
-            self.env_params['n_drones']
-        num_stations = self.env_params['stations_factor'] * \
-            self.env_params['n_drones']
-        available_positions = [(x, y) for x in range(
-            self.side_size) for y in range(self.side_size)]
-        self._skyscrapers, available_positions = self.spawn_objects(
-            available_positions, num_skyscrapers)
+        num_skyscrapers = self.env_params['skyscrapers_factor'] * self.env_params['n_drones']
+        num_packets = self.env_params['packets_factor'] * self.env_params['n_drones']
+        num_dropzone = self.env_params['dropzones_factor'] * self.env_params['n_drones']
+        num_stations = self.env_params['stations_factor'] * self.env_params['n_drones']
+        available_positions = [(x, y) for x in range(self.side_size) for y in range(self.side_size)]
+        self._skyscrapers, available_positions = self.spawn_objects(available_positions, num_skyscrapers)
 
         # Add the drones, which don't remove their positions from available_positions
         # as they can spawn on packets, dropzones or stations
