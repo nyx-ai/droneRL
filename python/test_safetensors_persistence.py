@@ -9,14 +9,15 @@ from agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory, Base
 
 
 @pytest.mark.parametrize("factory_class,factory_params", [
+    (DenseQNetworkFactory, {"hidden_layers": []}),
     (DenseQNetworkFactory, {"hidden_layers": [32]}),
     (DenseQNetworkFactory, {"hidden_layers": [8, 8, 8]}),
-    (ConvQNetworkFactory, {"conv_layers": [
-     {'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [32]}),
-    (ConvQNetworkFactory, {"conv_layers": [
-     {'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [32]}),
-    (ConvQNetworkFactory, {"conv_layers": [
-     {'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [8, 8, 8]}),
+    (ConvQNetworkFactory, {"conv_layers": [{'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [32]}),
+    (ConvQNetworkFactory, {"conv_layers": [{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [32]}),
+    (ConvQNetworkFactory, {"conv_layers": [{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [8, 8, 8]}),
+    (ConvQNetworkFactory, {"conv_layers": [{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], "dense_layers": [8, 8, 8]}),
+    (ConvQNetworkFactory, {"conv_layers": [], "dense_layers": [8, 8, 8]}),
+    (ConvQNetworkFactory, {"conv_layers": [], "dense_layers": []}),
 ])
 def test_agent_save_load(factory_class, factory_params):
     # Create small environment
@@ -85,6 +86,8 @@ def test_agent_save_load(factory_class, factory_params):
 
     assert actions == new_actions, "Actions before and after loading should be identical"
     print("Actions before and after loading are identical")
+
+    print(new_agent.qnetwork.network)
 
 
 if __name__ == "__main__":
