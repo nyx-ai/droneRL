@@ -7,3 +7,4 @@ tqdm==4.67.0
 seaborn==0.13.2
 moviepy==1.0.3
 flax==0.10.2
+safetensors==0.5.2

@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, Union
+from typing import Tuple, Dict, Union, Literal
 import jax
 import jax.random
 import jax.numpy as jnp
@@ -6,6 +6,9 @@ from flax.struct import dataclass, field
 from flax.core import FrozenDict
 from flax import linen as nn
 import optax
+from safetensors.numpy import save_file, load_file
+from safetensors import safe_open
+from flax.traverse_util import flatten_dict, unflatten_dict
 
 from env.env import DroneEnvParams
 from env.constants import Action
@@ -138,3 +141,54 @@ class DQNAgent():
     def update_epsilon(self, ag_state: DQNAgentState, ag_params: DQNAgentParams):
         epsilon = jnp.maximum(ag_state.epsilon * ag_params.epsilon_decay, ag_params.epsilon_end)
         return ag_state.replace(epsilon=epsilon)
+
+    def load(self, path: str, ag_state: DQNAgentState):
+        metadata = safe_open(path, 'np').metadata()
+        if metadata.get('checkpoint_format') != 'jax':
+            raise Exception(f'The checkpoint under {path} is not compatible with JAX')
+        params = load_file(path)
+        params = unflatten_dict(params, sep='.')
+        ag_state = ag_state.replace(qnetwork_params=params, target_qnetwork_params=params)
+        return ag_state
+
+    def save(
+            self,
+            save_path: str,
+            ag_state: DQNAgentState,
+            ag_params: DQNAgentParams,
+            env_params: DroneEnvParams,
+            checkpoint_format: Literal['python', 'jax'] = 'jax',
+            checkpoint_format_version: float = 0.1,
+            ):
+        assert checkpoint_format in ['python', 'jax'], f'Unexpected checkpoint format {checkpoint_format}'
+        window_size = env_params.window_radius * 2 + 1
+        metadata = {
+            "network_type": "dense",
+            "dense_layers": str(ag_params.hidden_layers),
+            "obs_shape": str((window_size, window_size, 6)),
+            "action_shape": str((Action.num_actions(),)),
+            "checkpoint_format": checkpoint_format,
+            "checkpoint_format_version": str(checkpoint_format_version),
+        }
+
+        params = jax.device_get(ag_state.qnetwork_params)
+        params = dict(flatten_dict(params, sep='.'))
+        if checkpoint_format == 'python':
+            # some renaming to make the checkpoint compatible with the Python implementation
+            new_params = {}
+            for original_key, v in params.items():
+                key = original_key.split('.')
+                if key[0] == 'params':
+                    key[0] = 'network'
+                if key[1].startswith('Dense'):
+                    new_key_name = key[1].lower()  # Dense => dense
+                    new_key_name, layer_idx = new_key_name.split('_')
+                    new_key_name = new_key_name + '_' + str(int(layer_idx) + 1)
+                    key[1] = new_key_name
+                if key[-1] == 'kernel':
+                    v = v.T
+                    key[-1] = 'weight'
+                new_key = '.'.join(key)
+                new_params[new_key] = v
+            params = new_params
+        save_file(params, save_path, metadata=metadata)

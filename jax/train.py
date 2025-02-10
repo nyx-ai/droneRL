@@ -28,7 +28,8 @@ def train():
     # params
     batch_size = 64
     memory_size = 10_000
-    hidden_layers = (32, 32)
+    hidden_layers = ()
+    window_radius = 2
     # n_drones = 3
     # grid_size = 10
     n_drones = 1024
@@ -44,7 +45,7 @@ def train():
     # n_drones = 2048
     # grid_size = 203
 
-    env_params = DroneEnvParams(n_drones=n_drones, grid_size=grid_size)
+    env_params = DroneEnvParams(n_drones=n_drones, grid_size=grid_size, window_radius=window_radius)
     ag_params = DQNAgentParams(hidden_layers=hidden_layers)
     env = DeliveryDrones()
     rng = jax.random.PRNGKey(0)
@@ -148,6 +149,11 @@ def train():
     step_mean, step_stdev = stats(timings[skip_first:], factor=1000.0/num_steps_scan)
     logger.info(f'Scan training took {step_mean:.3f} ± {step_stdev:>6.3f} s/k steps')
 
+    # save agent
+    dqn_agent.save('ckpt.safetensors', ag_state, ag_params, env_params)
+    ag_state = dqn_agent.load('ckpt.safetensors', ag_state)
+    # __import__('pdb').set_trace()
+
     def _eval(carry, step):
         rng, state, ag_state = carry
 
@@ -167,7 +173,7 @@ def train():
         state, rewards, dones = env.step(key, state, actions, test_env_params)
         return (rng, state, ag_state), rewards
 
-    test_env_params = DroneEnvParams(n_drones=3, grid_size=10)
+    test_env_params = DroneEnvParams(n_drones=3, grid_size=10, window_radius=window_radius)
     num_test_steps = 10_000
     test_state = env.reset(rng, test_env_params)
     ts = timer()
