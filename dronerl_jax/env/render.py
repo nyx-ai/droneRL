@@ -40,6 +40,7 @@ class Renderer:
         self.trace_paths = [[None for _ in range(grid_size)] for _ in range(grid_size)]
         self.trace_drone_ids_only = trace_drone_ids_only
         self.ship_colors = []
+        self.cum_rewards = np.zeros(n_drones, dtype=np.float32)
 
     def init(self):
         # Load RGB image
@@ -255,7 +256,8 @@ class Renderer:
         draw_handle.text((self.render_padding + 2, self.render_padding), f'Step: {step:>{number_indent},}', fill='black', font=self.font)
         draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing), 'Rewards', fill='black', font=self.font)
         for player_id in range(len(rewards)):
-            draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing * (2 + player_id)), f'P{player_id:}: {rewards[player_id]:>{number_indent + 2}.1f}', fill='black', font=self.font)
+            self.cum_rewards[player_id] += rewards[player_id]
+            draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing * (2 + player_id)), f'P{player_id:}: {self.cum_rewards[player_id]:>{number_indent + 2}.1f}', fill='black', font=self.font)
 
         frame = np.vstack([np.hstack([frame, np.vstack([self.panel, metric_panel])]), self.legend])
         frame = Image.fromarray(frame)
