@@ -1,4 +1,4 @@
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Sequence, Optional
 from collections import defaultdict, Counter
 from collections import deque
 
@@ -46,9 +46,13 @@ class DenseQNetwork(QNetwork):
     The network flattens the obs/action spaces and adds dense layers in between
     """
 
-    def __init__(self, obs_shape, action_shape, hidden_layers=()):
-        assert isinstance(obs_shape, tuple), 'Observation space should be a tuple'
-        assert isinstance(action_shape, tuple), 'Action space should be a tuple'
+    def __init__(self, obs_shape: Sequence[int], action_shape: Sequence[int], hidden_layers: Sequence[int] = ()):
+        assert isinstance(obs_shape, (tuple, list)), 'Observation space should be a tuple or list'
+        assert isinstance(action_shape, (tuple, list)), 'Action space should be a tuple or list'
+        if isinstance(obs_shape, list):
+            obs_shape = tuple(obs_shape)
+        if isinstance(action_shape, list):
+            action_shape = tuple(action_shape)
 
         # Create network
         super().__init__()
@@ -84,12 +88,22 @@ class ConvQNetwork(QNetwork):
 
     def __init__(
             self,
-            obs_shape: Tuple[int, ...],
-            action_shape: Tuple[int],
-            conv_layers: Tuple[Dict[str, int], ...] = ({'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},),
-            dense_layers: Tuple[int, ...] = ()):
-        assert isinstance(obs_shape, tuple), 'Observation space should be a tuple'
-        assert isinstance(action_shape, tuple), 'Action space should be a tuple'
+            obs_shape: Sequence[int],
+            action_shape: Sequence[int],
+            conv_layers: Sequence[Dict[str, int]] = ({'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},),
+            dense_layers: Sequence[int] = ()):
+        assert isinstance(obs_shape, (tuple, list)), 'Observation space should be a tuple or list'
+        assert isinstance(action_shape, (tuple, list)), 'Action space should be a tuple or list'
+        assert isinstance(conv_layers, (tuple, list)), 'conv_layers should be a tuple or list'
+        assert isinstance(dense_layers, (tuple, list)), 'dense_layers should be a tuple or list'
+        if isinstance(obs_shape, list):
+            obs_shape = tuple(obs_shape)
+        if isinstance(action_shape, list):
+            action_shape = tuple(action_shape)
+        if isinstance(conv_layers, list):
+            conv_layers = tuple(conv_layers)
+        if isinstance(dense_layers, list):
+            dense_layers = tuple(dense_layers)
 
         # Create network
         super().__init__()
@@ -175,9 +189,9 @@ class DenseQNetworkFactory(BaseDQNFactory):
 
     def __init__(
             self,
-            obs_shape: Tuple[int, ...],
-            action_shape: Tuple[int],
-            hidden_layers: Tuple[int, ...] = (),
+            obs_shape: Sequence[int],
+            action_shape: Sequence[int],
+            hidden_layers: Sequence[int] = (),
             learning_rate: float = 1e-3,
             state_dict=None):
         self.obs_shape = obs_shape
@@ -214,7 +228,13 @@ class ConvQNetworkFactory(BaseDQNFactory):
     A Q-network factory for convolutional Q-networks
     """
 
-    def __init__(self, obs_shape, action_shape, conv_layers=None, dense_layers=None, state_dict=None):
+    def __init__(
+            self,
+            obs_shape: Sequence[int],
+            action_shape: Sequence[int],
+            conv_layers: Sequence[Dict[str, int]] = (),
+            dense_layers: Sequence[int] = (),
+            state_dict: Optional[Dict] = None):
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.conv_layers = conv_layers
@@ -261,7 +281,7 @@ class DQNAgent():
     """
 
     def __init__(self, env, dqn_factory, gamma, epsilon_start, epsilon_decay, epsilon_end, memory_size, batch_size,
-                 target_update_interval, logger: Logger = None):
+                 target_update_interval, logger: Optional[Logger] = None):
         # Save parameters
         self.env = env
         self.dqn_factory = dqn_factory  # Factory to create q-networks + optimizers
