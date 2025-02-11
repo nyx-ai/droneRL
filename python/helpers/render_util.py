@@ -78,7 +78,7 @@ def render_video(
 
     # renderer
     grid_size = env.env.ground.shape[0]
-    renderer = Renderer(n_drones, grid_size, rgb_render_rescale=4)
+    renderer = Renderer(n_drones, grid_size, resolution_scale_factor=4)
     renderer.init()
 
     # starting frame

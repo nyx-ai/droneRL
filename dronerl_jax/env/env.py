@@ -24,7 +24,6 @@ class DroneEnvParams:
     dropzones_factor: int = 2
     stations_factor: int = 2
     skyscrapers_factor: int = 3
-    rgb_render_rescale: float = 1.0
     wrapper: Literal['window', 'compass'] = 'window'
     window_radius: int = 3
 

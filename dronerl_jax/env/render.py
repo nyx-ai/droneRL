@@ -21,14 +21,14 @@ class Renderer:
             n_drones: int,
             grid_size: int,
             player_name_mappings: Optional[Dict[int, str]] = None,
-            rgb_render_rescale: float = 1.0,
+            resolution_scale_factor: float = 1.0,
             trace_length: int = 0,
             trace_drone_ids_only: Tuple[int] = (0,),
             image_format: Literal['png', 'jpg'] = 'png'):
         self.n_drones = n_drones
         self.grid_size = grid_size
         self.player_name_mappings = player_name_mappings
-        self.rgb_render_rescale = rgb_render_rescale
+        self.resolution_scale_factor = resolution_scale_factor
         self.orientation = self.n_drones * [Action.RIGHT]
         self.image_format = image_format
         self.is_initialized = False
@@ -261,7 +261,7 @@ class Renderer:
         frame = Image.fromarray(frame)
 
         # Rescale frame
-        rescale = lambda old_size: int(old_size * self.rgb_render_rescale)
+        rescale = lambda old_size: int(old_size * self.resolution_scale_factor)
         frame = frame.resize(size=(rescale(frame.size[0]), rescale(frame.size[1])), resample=Image.NEAREST)
         return frame
 
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     num_steps = 200
     state = env.reset(rng, params)
     step_jit = jax.jit(env.step, static_argnums=(3,))
-    renderer = Renderer(params.n_drones, params.grid_size, rgb_render_rescale=4)
+    renderer = Renderer(params.n_drones, params.grid_size, resolution_scale_factor=4)
     renderer.init()
 
     # starting state

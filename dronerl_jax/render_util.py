@@ -37,8 +37,9 @@ def render_video(
         output_path: str = './out.mp4',
         temp_dir: Optional[str] = None,
         fps: int = 3,
+        resolution_scale_factor: float = 3,
         seed: int = 0):
-    renderer = Renderer(env_params.n_drones, env_params.grid_size, rgb_render_rescale=4)
+    renderer = Renderer(env_params.n_drones, env_params.grid_size, resolution_scale_factor=resolution_scale_factor)
     renderer.init()
     rng = jax.random.PRNGKey(seed)
     env = DeliveryDrones()
