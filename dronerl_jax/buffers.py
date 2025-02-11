@@ -53,10 +53,9 @@ class ReplayBuffer:
                 )
         return state
 
-    def sample(self, rng: jnp.ndarray, state: BufferState):
-        rng, sampling_rng = jax.random.split(rng)
+    def sample(self, key: jnp.ndarray, state: BufferState):
         indices = jax.random.randint(
-            sampling_rng,
+            key,
             shape=(self.sample_batch_size,),
             minval=0,
             maxval=state.current_size
@@ -65,7 +64,7 @@ class ReplayBuffer:
                 lambda x: jnp.take(x, indices, axis=0),
                 state.experiences,
                 )
-        return batch, rng
+        return batch
 
 
     def can_sample(self, state: BufferState):

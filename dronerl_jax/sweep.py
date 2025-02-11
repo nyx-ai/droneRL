@@ -90,7 +90,7 @@ def evaluate(config):
         # train step
         def train_if_can_sample(args):
             ag_state, bstate, key = args
-            batch, key = buffer.sample(key, bstate)
+            batch = buffer.sample(key, bstate)
             trained_state, loss = dqn_agent.train_step(
                 ag_state,
                 batch['obs'],
