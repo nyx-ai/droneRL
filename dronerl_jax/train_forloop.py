@@ -71,7 +71,7 @@ def train():
     # jit functions
     # do_jit = False
     do_jit = True
-    train_step_jit = jax.jit(dqn_agent.train_step, static_argnums=(6,)) if do_jit else dqn_agent.train_step
+    train_step_jit = jax.jit(dqn_agent.train_step, static_argnums=(3,)) if do_jit else dqn_agent.train_step
     step_jit = jax.jit(env.step, static_argnums=(3,)) if do_jit else env.step
     act_jit = jax.jit(dqn_agent.act) if do_jit else dqn_agent.act
     get_obs_jit = jax.jit(env.get_obs, static_argnums=(1,)) if do_jit else env.get_obs
@@ -128,14 +128,7 @@ def train():
             if do_timing and step > skip_timing:
                 timing['buffer_sample'].append(timer() - ts)
             ts = timer()
-            ag_state, loss = train_step_jit(
-                    ag_state,
-                    batch['obs'],
-                    batch['actions'],
-                    batch['rewards'],
-                    batch['next_obs'],
-                    batch['dones'],
-                    ag_params)
+            ag_state, loss = train_step_jit(ag_state, batch, ag_params)
             loss.block_until_ready()
             if do_timing and step > skip_timing:
                 timing['train_step'].append(timer() - ts)

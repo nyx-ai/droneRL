@@ -195,7 +195,7 @@ def test_skyscrapers(drone_env_skyscrapers):
     assert state_out.ground[3, 4] == Object.SKYSCRAPER  # skyscraper hasn't moved
 
 
-@pytest.mark.focus
+# @pytest.mark.focus
 def test_packages(drone_env_packages):
     state, params = drone_env_packages
     env = DeliveryDrones()

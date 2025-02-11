@@ -91,14 +91,7 @@ def evaluate(config):
         def train_if_can_sample(args):
             ag_state, bstate, key = args
             batch = buffer.sample(key, bstate)
-            trained_state, loss = dqn_agent.train_step(
-                ag_state,
-                batch['obs'],
-                batch['actions'],
-                batch['rewards'],
-                batch['next_obs'],
-                batch['dones'],
-                ag_params)
+            trained_state, loss = dqn_agent.train_step(ag_state, batch, ag_params)
             return trained_state, loss
 
         ag_state, loss = jax.lax.cond(

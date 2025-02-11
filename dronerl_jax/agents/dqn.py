@@ -94,26 +94,22 @@ class DQNAgent():
     def train_step(
             self,
             ag_state: DQNAgentState,
-            obs: jnp.ndarray,
-            actions: jnp.ndarray,
-            rewards: jnp.ndarray,
-            next_obs: jnp.ndarray,
-            dones: jnp.ndarray,
+            batch: Dict[str, jnp.ndarray],
             ag_params: DQNAgentParams):
 
         def compute_loss(network_params):
             # Q-values for current state (network)
-            q_values = ag_state.qnetwork.apply(network_params, obs)
-            q_value = jnp.take(q_values, actions)
+            q_values = ag_state.qnetwork.apply(network_params, batch['obs'])
+            q_value = jnp.take(q_values, batch['actions'])
 
             # Q-values for next state (target network)
             next_q_values = ag_state.target_qnetwork.apply(
                     ag_state.target_qnetwork_params,
-                    next_obs)
+                    batch['next_obs'])
             next_q_value = jnp.max(next_q_values)
 
             # Bellman equation
-            td_target = rewards + ag_params.gamma * next_q_value * (1 - dones)
+            td_target = batch['rewards'] + ag_params.gamma * next_q_value * (1 - batch['dones'])
 
             # MSE loss
             loss = jnp.mean(jnp.square(q_value - td_target))
