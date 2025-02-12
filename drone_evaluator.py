@@ -1,16 +1,14 @@
 import os.path
-
 import numpy as np
-import torch
 import tqdm
-
-from python.env.env import DeliveryDrones
-from python.env.wrappers import WindowedGridView
-from python.helpers.rl_helpers import set_seed
 from PIL import Image
 import tempfile
+
 import aicrowd_helpers
-from python.agents.dqn import BaseDQNFactory
+from torch_impl.agents.dqn import BaseDQNFactory
+from torch_impl.env.env import DeliveryDrones
+from torch_impl.env.wrappers import WindowedGridView
+from torch_impl.helpers.rl_helpers import set_seed
 
 
 class DroneRacerEvaluator:

@@ -1,15 +1,11 @@
 import statistics
-from dataclasses import dataclass
-import numpy as np
 from tqdm import tqdm
-from tabulate import tabulate
-import matplotlib.pyplot as plt
 from pprint import pprint
 
-from python.env.env import DeliveryDrones
-from python.env.wrappers import WindowedGridView
-from python.agents.dqn import DQNAgent, DenseQNetworkFactory
-from python.agents.random import RandomAgent
+from torch_impl.env.env import DeliveryDrones
+from torch_impl.env.wrappers import WindowedGridView
+from torch_impl.agents.dqn import DQNAgent, DenseQNetworkFactory
+from torch_impl.agents.random import RandomAgent
 
 
 def benchmark_implementation(env, config, n_drones, n_steps):

@@ -4,9 +4,9 @@ import argparse
 import tqdm
 import time
 
-from python.env.env import DeliveryDrones
-from python.env.wrappers import WindowedGridView
-from python.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
+from torch_impl.env.env import DeliveryDrones
+from torch_impl.env.wrappers import WindowedGridView
+from torch_impl.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
 
 
 def create_baseline_models(num_models=5, num_steps=1000):

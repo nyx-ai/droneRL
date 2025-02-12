@@ -3,9 +3,9 @@ import tempfile
 
 import pytest
 
-from python.env.env import DeliveryDrones
-from python.env.wrappers import WindowedGridView
-from python.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory, BaseDQNFactory
+from torch_impl.env.env import DeliveryDrones
+from torch_impl.env.wrappers import WindowedGridView
+from torch_impl.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory, BaseDQNFactory
 
 
 @pytest.mark.parametrize("factory_class,factory_params", [

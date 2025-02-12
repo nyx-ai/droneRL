@@ -2,14 +2,13 @@ import torch
 import numpy as np
 import pytest
 import jax
-import jax.numpy as jnp
 import jax.random
 import tempfile
 
-from python.agents.dqn import DQNAgent as PyDQNAgent
-from python.env.wrappers import WindowedGridView
-from python.env.env import DeliveryDrones as PyDeliveryDrones
-from python.agents.dqn import BaseDQNFactory
+from torch_impl.agents.dqn import DQNAgent as PyDQNAgent
+from torch_impl.env.wrappers import WindowedGridView
+from torch_impl.env.env import DeliveryDrones as PyDeliveryDrones
+from torch_impl.agents.dqn import BaseDQNFactory
 from jax_impl.env.env import DroneEnvParams, DeliveryDrones
 from jax_impl.agents.dqn import DQNAgent, DQNAgentParams
 
@@ -57,6 +56,6 @@ def test_dqn_agent_save(jax_dqn_agent, jax_obs):
             target_update_interval=100
         )
         with torch.no_grad():
-            py_out = py_agent.qnetwork([torch.from_numpy(np.asarray(jax_obs))])[0]
+            py_out = py_agent.qnetwork([torch.from_numpy(np.asarray(jax_obs).copy())])[0]
         jax_out = ag_state.qnetwork.apply(ag_state.qnetwork_params, jax_obs)
-        assert torch.allclose(py_out, torch.from_numpy(np.asarray(jax_out)))
+        assert torch.allclose(py_out, torch.from_numpy(np.asarray(jax_out).copy()))
