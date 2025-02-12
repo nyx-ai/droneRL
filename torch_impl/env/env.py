@@ -38,7 +38,7 @@ class DeliveryDrones(Env):
     }
 
     @property
-    def drones(self):
+    def drones_list(self):
         # TODO check if still used?
         return list(self._drones.values())
 
@@ -59,11 +59,11 @@ class DeliveryDrones(Env):
         return positions_dict, available_pos
 
     def reset(self, seed=0):
-        self._drones = {}
-        self._stations = {}
-        self._dropzones = {}
-        self._packets = {}
-        self._skyscrapers = {}
+        self.drones = {}
+        self.stations = {}
+        self.dropzones = {}
+        self.packets = {}
+        self.skyscrapers = {}
         self.n_drones = self.env_params['n_drones']
         self.side_size = int(math.ceil(math.sqrt(self.env_params['n_drones'] / self.env_params['drone_density'])))
         self.shape = (self.side_size, self.side_size)
