@@ -41,6 +41,7 @@ class Renderer:
         self.trace_drone_ids_only = trace_drone_ids_only
         self.ship_colors = []
         self.cum_rewards = np.zeros(n_drones, dtype=np.float32)
+        self.step = 0
 
     def init(self):
         # Load RGB image
@@ -173,7 +174,6 @@ class Renderer:
 
     def render_frame(
             self,
-            step: int,
             ground: np.ndarray,
             air: np.ndarray,
             carrying_package: np.ndarray,
@@ -253,7 +253,7 @@ class Renderer:
         metric_panel = copy.copy(self.metric_panel)
         draw_handle = ImageDraw.Draw(metric_panel, mode='RGB')
         number_indent = 6
-        draw_handle.text((self.render_padding + 2, self.render_padding), f'Step: {step:>{number_indent},}', fill='black', font=self.font)
+        draw_handle.text((self.render_padding + 2, self.render_padding), f'Step: {self.step:>{number_indent},}', fill='black', font=self.font)
         draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing), 'Reward sum', fill='black', font=self.font)
         for player_id in range(len(rewards)):
             self.cum_rewards[player_id] += rewards[player_id]
@@ -262,13 +262,16 @@ class Renderer:
         frame = np.vstack([np.hstack([frame, np.vstack([self.panel, metric_panel])]), self.legend])
         frame = Image.fromarray(frame)
 
+        # increment step
+        self.step += 1
+
         # Rescale frame
         rescale = lambda old_size: int(old_size * self.resolution_scale_factor)
         frame = frame.resize(size=(rescale(frame.size[0]), rescale(frame.size[1])), resample=Image.NEAREST)
         return frame
 
-    def save_frame(self, img: Image.Image, step: int, output_dir: str):
-        img.save(os.path.join(output_dir, f'{step:04d}.{self.image_format}'))
+    def save_frame(self, img: Image.Image, output_dir: str):
+        img.save(os.path.join(output_dir, f'{self.step:04d}.{self.image_format}'))
 
     def make_subprocess_call(self, command: str, shell: bool = False):
         result = subprocess.run(
@@ -334,8 +337,8 @@ if __name__ == "__main__":
         actions = jax.random.randint(key, (params.n_drones,), 0, 5, dtype=jnp.int32)
         state, rewards, dones = step_jit(rng, state, actions, params)
 
-        img = renderer.render_frame(*convert_jax_state(step, state, actions, rewards))
-        renderer.save_frame(img, step, 'output')
+        img = renderer.render_frame(*convert_jax_state(state, actions, rewards))
+        renderer.save_frame(img, 'output')
         print('step', step)
         print(env.format_action(*actions), dones, state.carrying_package)
         print('x:', state.air_x, 'y:', state.air_y)

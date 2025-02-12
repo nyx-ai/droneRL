@@ -15,8 +15,8 @@ from agents.dqn import DQNAgent, DenseQNetworkFactory
 logger = logging.getLogger(__name__)
 
 
-def convert_python_state(step, env, rewards, actions) \
-        -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def convert_python_state(env, rewards, actions) \
+        -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     # TODO: Currently this works for the old Python env
     ground = env.env.ground.grid.copy()
     ground = np.where(ground == 4, 5, ground)
@@ -32,7 +32,7 @@ def convert_python_state(step, env, rewards, actions) \
     charge = np.array([a.charge for a in env.drones], dtype=np.int32)
     actions = np.array([actions[k] for k in range(len(actions))], dtype=np.int32)
     rewards = np.array([rewards[k] for k in range(len(rewards))], dtype=np.int32)
-    return step, ground, air, carrying_package, charge, rewards, actions
+    return ground, air, carrying_package, charge, rewards, actions
 
 
 def render_video(
@@ -98,8 +98,8 @@ def render_video(
             actions = {key: agent.act(states[key]) for key, agent in agents.items()}
         states, rewards, dones, _, _ = env.step(actions)
 
-        img = renderer.render_frame(*convert_python_state(step, env, rewards, actions))
-        renderer.save_frame(img, step, temp_dir)
+        img = renderer.render_frame(*convert_python_state(env, rewards, actions))
+        renderer.save_frame(img, temp_dir)
     renderer.generate_video(temp_dir, output_path, output_resolution=img.size, fps=fps)
     shutil.rmtree(temp_dir)
     logger.info(f'Generated video {os.path.abspath(output_path)}')

@@ -76,8 +76,8 @@ def test_rendering(tmp_path):
             next_states, rewards, dones, info, _ = env.step(actions)
             ground, air, carrying_package, charge = convert_states_for_rendering(next_states, env.side_size)
 
-            img = renderer.render_frame(step, ground, air, carrying_package, charge, rewards, actions)
-            renderer.save_frame(img, step, temp_dir)
+            img = renderer.render_frame(ground, air, carrying_package, charge, rewards, actions)
+            renderer.save_frame(img, temp_dir)
 
             # Basic assertions
             assert img.size[0] > 0 and img.size[1] > 0

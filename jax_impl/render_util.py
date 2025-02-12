@@ -15,8 +15,8 @@ from jax_impl.agents.dqn import DQNAgent, DQNAgentState
 logger = logging.getLogger(__name__)
 
 
-def convert_jax_state(step, state, actions, rewards) \
-         -> Tuple[int, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def convert_jax_state(state, actions, rewards) \
+         -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     ground = jax.device_get(state.ground)
     actions = jax.device_get(actions)
     rewards = jax.device_get(rewards)
@@ -27,7 +27,7 @@ def convert_jax_state(step, state, actions, rewards) \
     air[:] = None
     air[air_y, air_x] = np.arange(air_x.size)
     carrying_package = jax.device_get(state.carrying_package)
-    return step, ground, air, carrying_package, charge, rewards, actions
+    return ground, air, carrying_package, charge, rewards, actions
 
 
 def render_video(
@@ -50,13 +50,12 @@ def render_video(
     get_obs_jit = jax.jit(env.get_obs, static_argnums=(1,))
 
     # starting frame
-    img = renderer.render_frame(*convert_jax_state(
-        0, env_state, jnp.array(env_params.n_drones * [4]), jnp.array(env_params.n_drones * [0.0])))
+    img = renderer.render_frame(*convert_jax_state(env_state, jnp.array(env_params.n_drones * [4]), jnp.array(env_params.n_drones * [0.0])))
 
     if temp_dir is None:
         temp_dir = tempfile.mkdtemp()
     os.makedirs(temp_dir, exist_ok=True)
-    renderer.save_frame(img, 0, temp_dir)
+    renderer.save_frame(img, temp_dir)
 
     logger.info('Generating video...')
     for step in trange(1, num_steps):
@@ -67,8 +66,8 @@ def render_video(
         dqn_action = act_jit(key, obs, ag_state, greedy=True)
         actions = actions.at[0].set(dqn_action)
         env_state, rewards, dones = step_jit(rng, env_state, actions, env_params)
-        img = renderer.render_frame(*convert_jax_state(step, env_state, actions, rewards))
-        renderer.save_frame(img, step, temp_dir)
+        img = renderer.render_frame(*convert_jax_state(env_state, actions, rewards))
+        renderer.save_frame(img, temp_dir)
     renderer.generate_video(temp_dir, output_path, output_resolution=img.size, fps=fps)
     shutil.rmtree(temp_dir)
     logger.info(f'Generated video {os.path.abspath(output_path)}')
