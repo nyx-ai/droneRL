@@ -2,9 +2,10 @@ import pytest
 import numpy as np
 import tempfile
 import os
-from env.env import DeliveryDrones
-from agents.random import RandomAgent
-from render import Renderer
+
+from torch_impl.env.env import DeliveryDrones
+from torch_impl.agents.random import RandomAgent
+from common.render import Renderer
 from enum import IntEnum
 
 
@@ -54,7 +55,7 @@ def convert_states_for_rendering(state, side_size):
 def test_rendering(tmp_path):
     env_params = {'n_drones': 8}
     env = DeliveryDrones(env_params)
-    states = env.reset()
+    env.reset()
     agents = {drone.index: RandomAgent(env) for drone in env.drones}
 
     renderer = Renderer(
@@ -68,22 +69,24 @@ def test_rendering(tmp_path):
 
     with tempfile.TemporaryDirectory() as temp_dir:
         renderer.init()
-        
+
         # Test a few frames
         for step in range(500):
             actions = {key: agent.act(None) for key, agent in agents.items()}
             next_states, rewards, dones, info, _ = env.step(actions)
             ground, air, carrying_package, charge = convert_states_for_rendering(next_states, env.side_size)
-            
+
             img = renderer.render_frame(step, ground, air, carrying_package, charge, rewards, actions)
             renderer.save_frame(img, step, temp_dir)
-            
+
             # Basic assertions
             assert img.size[0] > 0 and img.size[1] > 0
-        
-        output_path = renderer.generate_video(temp_dir, os.path.join(artifacts_dir, "render_test.mp4"), output_resolution=img.size, fps=30)
+
+        output_path = renderer.generate_video(temp_dir, os.path.join(
+            artifacts_dir, "render_test.mp4"), output_resolution=img.size, fps=30)
         print(f'Generated video in {os.path.abspath(artifacts_dir)}')
         assert os.path.exists(output_path)
+
 
 if __name__ == "__main__":
     tmp_dir = tempfile.mkdtemp()
