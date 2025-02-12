@@ -9,8 +9,8 @@ from tqdm import trange
 import logging
 
 from common.render import Renderer
-from env.env import DroneEnvParams, DeliveryDrones
-from agents.dqn import DQNAgent, DQNAgentState
+from jax_impl.env.env import DroneEnvParams, DeliveryDrones
+from jax_impl.agents.dqn import DQNAgent, DQNAgentState
 
 logger = logging.getLogger(__name__)
 
