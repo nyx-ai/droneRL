@@ -129,7 +129,7 @@ class DroneRacerEvaluator:
             renderer = Renderer(
                 env.n_drones,
                 env.side_size,
-                resolution_scale_factor=4.0
+                resolution_scale_factor=2.0
             )
             renderer.init()
 
@@ -178,7 +178,7 @@ class DroneRacerEvaluator:
 
                         ground, air, carrying_package, charge = convert_for_rendering(env)
                         _step_frame_im = renderer.render_frame(
-                            _step, ground, air, carrying_package, charge, rewards, _action_dictionary)
+                            ground, air, carrying_package, charge, rewards, _action_dictionary)
                         # _step_frame_im = Image.fromarray(np.random.randint(low=0, high=255, size=(250, 250), dtype=np.uint8))
                         _step_frame_im.save("{}/{}.jpg".format(self.video_directory_path, str(_step).zfill(4)))
 
