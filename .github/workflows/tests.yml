@@ -32,7 +32,7 @@ jobs:
         pytest tests/torch_tests
 
     - name: Upload test artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-videos-conda
         path: artifacts/*.mp4
@@ -63,7 +63,7 @@ jobs:
         pytest tests/torch_tests
 
     - name: Upload test artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-videos-pip
         path: artifacts/*.mp4
