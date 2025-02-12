@@ -24,9 +24,18 @@ jobs:
 
     - name: Run Tests
       shell: bash -l {0}
+      env:
+        ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
       run: |
         conda activate dronerl-env-v3
+        mkdir -p $ARTIFACTS_DIR
         pytest tests/torch_tests
+
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-videos-conda
+        path: artifacts/*.mp4
 
   test-python-pip:
     runs-on: ubuntu-latest
@@ -48,6 +57,17 @@ jobs:
 
     - name: Run Tests
       run: pytest tests/torch_tests
+      env:
+        ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
+      run: |
+        mkdir -p $ARTIFACTS_DIR
+        pytest python/
+
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-videos-pip
+        path: artifacts/*.mp4
 
   test-jax-pip:
     runs-on: ubuntu-latest

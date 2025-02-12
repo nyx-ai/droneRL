@@ -37,26 +37,16 @@ class DeliveryDrones(Env):
         'render.modes': ['ansi'],
     }
 
-    def __init__(self, env_params={}):
-        self._drones = None
-        self._stations = None
-        self._dropzones = None
-        self._packets = None
-        self._skyscrapers = None
-        self.env_params = self.DEFAULT_CONFIG
-        self.env_params.update(env_params)
-        self.action_space = spaces.Discrete(self.NUM_ACTIONS)
-
     @property
     def drones(self):
+        # TODO check if still used?
         return list(self._drones.values())
 
-    def reset_items(self):
-        self._drones = {}
-        self._stations = {}
-        self._dropzones = {}
-        self._packets = {}
-        self._skyscrapers = {}
+    def __init__(self, env_params={}):
+        self.action_space = spaces.Discrete(self.NUM_ACTIONS)
+        self.env_params = self.DEFAULT_CONFIG
+        self.env_params.update(env_params)
+        self.reset()
 
     def spawn_objects(self, available_pos, num_obj):
         positions_dict = {}
@@ -67,13 +57,16 @@ class DeliveryDrones(Env):
         return positions_dict, available_pos
 
     def reset(self, seed=0):
-        self.reset_items()
-
+        self._drones = {}
+        self._stations = {}
+        self._dropzones = {}
+        self._packets = {}
+        self._skyscrapers = {}
+        self.n_drones = self.env_params['n_drones']
         self.side_size = int(math.ceil(math.sqrt(self.env_params['n_drones'] / self.env_params['drone_density'])))
         self.shape = (self.side_size, self.side_size)
 
         # Create elements of the grid
-        num_drones = self.env_params['n_drones']
         num_skyscrapers = self.env_params['skyscrapers_factor'] * self.env_params['n_drones']
         num_packets = self.env_params['packets_factor'] * self.env_params['n_drones']
         num_dropzone = self.env_params['dropzones_factor'] * self.env_params['n_drones']
@@ -83,7 +76,7 @@ class DeliveryDrones(Env):
 
         # Add the drones, which don't remove their positions from available_positions
         # as they can spawn on packets, dropzones or stations
-        for i, p in enumerate(random.sample(available_positions, num_drones)):
+        for i, p in enumerate(random.sample(available_positions, self.n_drones)):
             self._drones[p] = Drone(i)
 
         self._packets, available_positions = self.spawn_objects(
@@ -101,7 +94,10 @@ class DeliveryDrones(Env):
     def _get_state(self):
         return {
             'drones': self._drones,
-            # TODO
+            'stations': self._stations,
+            'dropzones': self._dropzones,
+            'packets': self._packets,
+            'skyscrapers': self._skyscrapers,
         }
 
     def step(self, actions):
@@ -148,12 +144,12 @@ class DeliveryDrones(Env):
                         crashed_drone_locations.append(position)
 
                 # pickup/delivery
-                if position in self._packets and drone.packet is False:
+                if position in self._packets and not drone.packet:
                     # print(f"PICKUP from drone {drone}!!")
                     rewards[drone.index] = self.env_params['pickup_reward']
                     drone.packet = True
                     del self._packets[position]
-                elif position in self._dropzones and drone.packet is True:
+                elif position in self._dropzones and drone.packet:
                     # print(f"DELIVERY from drone {drone}!!")
                     rewards[drone.index] = self.env_params['delivery_reward']
                     drone.packet = False
