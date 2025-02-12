@@ -49,6 +49,8 @@ class DeliveryDrones(Env):
         self.reset()
 
     def spawn_objects(self, available_pos, num_obj):
+        if len(available_pos) < num_obj:
+            raise ValueError(f"Not enough positions ({len(available_pos)}) to spawn {num_obj} objects")
         positions_dict = {}
         random.shuffle(available_pos)
         for _ in range(num_obj):
