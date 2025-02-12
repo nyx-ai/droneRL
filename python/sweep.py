@@ -1,21 +1,19 @@
 import statistics
-import logging
-import math
 
 import wandb
 
 from agents.dqn import DQNAgent, DenseQNetworkFactory
 from agents.random import RandomAgent
-from env.v3.env import DeliveryDrones
-from env.v3.wrappers import WindowedGridView
+from env.env import DeliveryDrones
+from env.wrappers import WindowedGridView
 from helpers.rl_helpers import MultiAgentTrainer
 from helpers.rl_helpers import test_agents
 
 wandb.login()
 
 SWEEP_NAME = "dronerl-dense-1"
-NUM_TRAINING_STEPS = 10_000  # 25_000
-NUM_TESTING_STEPS = 10_000
+NUM_TRAINING_STEPS = 100
+NUM_TESTING_STEPS = 100
 
 
 def evaluate(config):

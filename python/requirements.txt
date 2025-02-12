@@ -13,3 +13,4 @@ pyarrow~=17.0.0
 pytest~=8.3.4
 imageio-ffmpeg~=0.6.0
 moviepy~=1.0.3
+wandb~=0.19.6
