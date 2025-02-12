@@ -74,18 +74,18 @@ class DeliveryDrones(Env):
         num_dropzone = self.env_params['dropzones_factor'] * self.env_params['n_drones']
         num_stations = self.env_params['stations_factor'] * self.env_params['n_drones']
         available_positions = [(x, y) for x in range(self.side_size) for y in range(self.side_size)]
-        self._skyscrapers, available_positions = self.spawn_objects(available_positions, num_skyscrapers)
+        self.skyscrapers, available_positions = self.spawn_objects(available_positions, num_skyscrapers)
 
         # Add the drones, which don't remove their positions from available_positions
         # as they can spawn on packets, dropzones or stations
         for i, p in enumerate(random.sample(available_positions, self.n_drones)):
-            self._drones[p] = Drone(i)
+            self.drones[p] = Drone(i)
 
-        self._packets, available_positions = self.spawn_objects(
+        self.packets, available_positions = self.spawn_objects(
             available_positions, num_packets)
-        self._dropzones, available_positions = self.spawn_objects(
+        self.dropzones, available_positions = self.spawn_objects(
             available_positions, num_dropzone)
-        self._stations, available_positions = self.spawn_objects(
+        self.stations, available_positions = self.spawn_objects(
             available_positions, num_stations)
 
         # Check if some packets are immediately picked
@@ -95,11 +95,11 @@ class DeliveryDrones(Env):
 
     def _get_state(self):
         return {
-            'drones': self._drones,
-            'stations': self._stations,
-            'dropzones': self._dropzones,
-            'packets': self._packets,
-            'skyscrapers': self._skyscrapers,
+            'drones': self.drones,
+            'stations': self.stations,
+            'dropzones': self.dropzones,
+            'packets': self.packets,
+            'skyscrapers': self.skyscrapers,
         }
 
     def step(self, actions):
@@ -114,7 +114,7 @@ class DeliveryDrones(Env):
         nb_packets_to_respawn = 0
 
         # Move all drones to their new location
-        for position, drone in self._drones.items():
+        for position, drone in self.drones.items():
             move = self.ACTION_TO_DIRECTION[actions[drone.index]]
             new_position = (position[0] + move[0], position[1] + move[1])
 
@@ -135,7 +135,7 @@ class DeliveryDrones(Env):
         for position, drone in new_drones.items():
             if drone not in crashed_drones:
                 # charging/discharging
-                if position in self._stations:
+                if position in self.stations:
                     drone.charge = min(100, drone.charge +
                                        self.env_params['charge'])
                     rewards[drone.index] = self.env_params['charge_reward']
@@ -146,16 +146,16 @@ class DeliveryDrones(Env):
                         crashed_drone_locations.append(position)
 
                 # pickup/delivery
-                if position in self._packets and not drone.packet:
+                if position in self.packets and not drone.packet:
                     # print(f"PICKUP from drone {drone}!!")
                     rewards[drone.index] = self.env_params['pickup_reward']
                     drone.packet = True
-                    del self._packets[position]
-                elif position in self._dropzones and drone.packet:
+                    del self.packets[position]
+                elif position in self.dropzones and drone.packet:
                     # print(f"DELIVERY from drone {drone}!!")
                     rewards[drone.index] = self.env_params['delivery_reward']
                     drone.packet = False
-                    del self._dropzones[position]
+                    del self.dropzones[position]
                     nb_dropzones_to_respawn += 1
                     nb_packets_to_respawn += 1
 
@@ -167,7 +167,7 @@ class DeliveryDrones(Env):
                 crashed_drones.append(new_drones[crashed_drone_location])
                 del new_drones[crashed_drone_location]
 
-        self._drones = new_drones
+        self.drones = new_drones
 
         # Respawn crashed drones
         for crashed_drone in crashed_drones:
@@ -177,22 +177,22 @@ class DeliveryDrones(Env):
                 crashed_drone.packet = False
             rewards[crashed_drone.index] = self.env_params['crash_reward']
             dones[crashed_drone.index] = True
-            self._drones[self._find_respawn_position(
-                self._drones | self._skyscrapers)] = crashed_drone
+            self.drones[self._find_respawn_position(
+                self.drones | self.skyscrapers)] = crashed_drone
 
         # Respawn used packets and dropzones
         ground_mask = {}
-        ground_mask.update(self._skyscrapers)
-        ground_mask.update(self._packets)
-        ground_mask.update(self._dropzones)
-        ground_mask.update(self._stations)
+        ground_mask.update(self.skyscrapers)
+        ground_mask.update(self.packets)
+        ground_mask.update(self.dropzones)
+        ground_mask.update(self.stations)
         for _ in range(nb_packets_to_respawn):
             position = self._find_respawn_position(ground_mask)
-            self._packets[position] = True
+            self.packets[position] = True
             ground_mask[position] = True
         for _ in range(nb_dropzones_to_respawn):
             position = self._find_respawn_position(ground_mask)
-            self._dropzones[position] = True
+            self.dropzones[position] = True
             ground_mask[position] = True
 
         # check if some packets are immediately picked
@@ -206,13 +206,13 @@ class DeliveryDrones(Env):
         return self._get_state(), rewards, dones, None, info
 
     def _pick_packets_after_respawn(self):
-        for drone_pos, drone in self._drones.items():
-            if drone.packet is False and drone_pos in self._packets:
+        for drone_pos, drone in self.drones.items():
+            if drone.packet is False and drone_pos in self.packets:
                 # we don't give pickup_reward in this case
                 # as the drone didn't do anything to deserve it
                 # print(f"SPAWN PICKUP from {drone}!")
                 drone.packet = True
-                del self._packets[drone_pos]
+                del self.packets[drone_pos]
 
     def _find_respawn_position(self, mask={}):
         while True:
@@ -232,16 +232,16 @@ class DeliveryDrones(Env):
             line_str = ''
             for x in range(self.shape[1]):
                 position = (y, x)
-                if position in self._drones:
-                    drone = self._drones[position]
+                if position in self.drones:
+                    drone = self.drones[position]
                     tile_char = f'{drone.index}'
-                elif position in self._packets:
+                elif position in self.packets:
                     tile_char = 'x'
-                elif position in self._dropzones:
+                elif position in self.dropzones:
                     tile_char = 'D'
-                elif position in self._stations:
+                elif position in self.stations:
                     tile_char = '@'
-                elif position in self._skyscrapers:
+                elif position in self.skyscrapers:
                     tile_char = '#'
                 else:
                     tile_char = '.'

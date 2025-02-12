@@ -15,7 +15,7 @@ def benchmark_implementation(env, config, n_drones, n_steps):
     print(env.render())
 
     rewards_log = {}
-    agents = {drone.index: RandomAgent(env) for drone in env.drones}
+    agents = {drone.index: RandomAgent(env) for drone in env.drones_list}
     rewards_log = {key: [] for key in agents.keys()}
     agents[0] = DQNAgent(
         env=env,

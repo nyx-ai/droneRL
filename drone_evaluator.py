@@ -3,12 +3,13 @@ import numpy as np
 import tqdm
 from PIL import Image
 import tempfile
-
 import aicrowd_helpers
 from torch_impl.agents.dqn import BaseDQNFactory
 from torch_impl.env.env import DeliveryDrones
 from torch_impl.env.wrappers import WindowedGridView
 from torch_impl.helpers.rl_helpers import set_seed
+from common.render import Renderer
+from torch_impl.render_util import convert_for_rendering
 
 
 class DroneRacerEvaluator:
@@ -33,8 +34,6 @@ class DroneRacerEvaluator:
             "baseline-4": "sample_models/dqn-agent-4.safetensors",
             "baseline-5": "sample_models/dqn-agent-5.safetensors",
         }
-
-        self.video_directory_path = tempfile.mkdtemp()
 
         ################################################
         # Load Baseline models
@@ -120,13 +119,19 @@ class DroneRacerEvaluator:
                 'stations_factor': 2
             }
             env_params["n_drones"] = len(self.participating_agents.keys())
-            env_params["rgb_render_rescale"] = 2.0  # large video - florian's request
 
             env = WindowedGridView(DeliveryDrones(env_params), radius=3)
             set_seed(env, episode_seed)  # Seed
 
             agent_name_mappings = self.get_agent_name_mapping()
             env.env_params["player_name_mappings"] = agent_name_mappings
+
+            renderer = Renderer(
+                env.n_drones,
+                env.side_size,
+                resolution_scale_factor=4.0
+            )
+            renderer.init()
 
             # Gather First Obeservation (state)
             state = env.reset()
@@ -151,22 +156,7 @@ class DroneRacerEvaluator:
                     ################################################
                     q_values = agent([state_agent])[0]
                     action = q_values.argmax().item()
-
                     _action_dictionary[_idx] = action
-                    ################################################
-                    # Collect frames for the first episode to generate video
-                    ################################################
-                    if _episode_idx == 0:
-                        if _step < 60:
-                            # Use only the first 60 frames for video generation
-                            # Record videos with env.render
-                            # Do it in a tempfile
-                            # Compile frames into a video (from flatland)
-
-                            # TODO actual env image generation
-                            _step_frame_im = Image.fromarray(np.random.randint(low=0, high=255, size=(250, 250), dtype=np.uint8))
-                            # _step_frame_im = Image.fromarray(env.render(mode='rgb_array'))
-                            _step_frame_im.save("{}/{}.jpg".format(self.video_directory_path, str(_step).zfill(4)))
 
                 # Perform action (on all agents)
                 state, rewards, _, _, _ = env.step(_action_dictionary)
@@ -175,6 +165,22 @@ class DroneRacerEvaluator:
                 _step_score = np.array(list(rewards.values()))  # Check with florian about ordering
 
                 episode_scores += _step_score
+
+                ################################################
+                # Collect frames for the first episode to generate video
+                ################################################
+                if _episode_idx == 0:
+                    if _step < 60:
+                        # Use only the first 60 frames for video generation
+                        # Record videos with env.render
+                        # Do it in a tempfile
+                        # Compile frames into a video (from flatland)
+
+                        ground, air, carrying_package, charge = convert_for_rendering(env)
+                        _step_frame_im = renderer.render_frame(
+                            _step, ground, air, carrying_package, charge, rewards, _action_dictionary)
+                        # _step_frame_im = Image.fromarray(np.random.randint(low=0, high=255, size=(250, 250), dtype=np.uint8))
+                        _step_frame_im.save("{}/{}.jpg".format(self.video_directory_path, str(_step).zfill(4)))
 
             # Store the current episode scores
             self.overall_scores.append(episode_scores)

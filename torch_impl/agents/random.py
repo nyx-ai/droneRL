@@ -13,3 +13,6 @@ class RandomAgent():
 
     def learn(self, state, action, reward, next_state, done):
         pass
+
+    def __str__(self):
+        return "RandomAgent"

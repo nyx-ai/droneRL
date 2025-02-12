@@ -14,26 +14,26 @@ class GridView(gym.ObservationWrapper):
         grid = np.zeros((self.env.side_size, self.env.side_size, 6), dtype=np.float32)
         print(grid.shape)
 
-        for (y, x), drone in self.env._drones.items():
+        for (y, x), drone in self.env.drones.items():
             grid[y, x, 0] = 1
             if drone.packet is not None:
                 grid[y, x, 1] = 1
             grid[y, x, 4] = drone.charge / 100
 
-        for (y, x) in self.env._packets.keys():
+        for (y, x) in self.env.packets.keys():
             grid[y, x, 1] = 1
 
-        for (y, x) in self.env._dropzones.keys():
+        for (y, x) in self.env.dropzones.keys():
             grid[y, x, 2] = 1
 
-        for (y, x) in self.env._stations.keys():
+        for (y, x) in self.env.stations.keys():
             grid[y, x, 3] = 1
 
-        for (y, x) in self.env._skyscrapers.keys():
+        for (y, x) in self.env.skyscrapers.keys():
             grid[y, x, 5] = 1
 
         states = {}
-        for (y, x), drone in self.env._drones.items():
+        for (y, x), drone in self.env.drones.items():
             states[drone.index] = grid.copy()
         return states
 
@@ -59,27 +59,27 @@ class WindowedGridView(gym.ObservationWrapper):
         grid = padded_grid[self.radius:-self.radius, self.radius:-self.radius]
 
         # Mark drones, packets, dropzones, stations, obstacles
-        for (y, x), drone in self.env._drones.items():
+        for (y, x), drone in self.env.drones.items():
             grid[y, x, 0] = 1
             if drone.packet is not None:
                 grid[y, x, 1] = 1
             grid[y, x, 4] = drone.charge / 100
 
-        for (y, x) in self.env._packets.keys():
+        for (y, x) in self.env.packets.keys():
             grid[y, x, 1] = 1
 
-        for (y, x) in self.env._dropzones.keys():
+        for (y, x) in self.env.dropzones.keys():
             grid[y, x, 2] = 1
 
-        for (y, x) in self.env._stations.keys():
+        for (y, x) in self.env.stations.keys():
             grid[y, x, 3] = 1
 
-        for (y, x) in self.env._skyscrapers.keys():
+        for (y, x) in self.env.skyscrapers.keys():
             grid[y, x, 5] = 1
 
         states = {}
         # Extract windowed views for each drone
-        for (y, x), drone in self.env._drones.items():
+        for (y, x), drone in self.env.drones.items():
             # Calculate absolute positions with padding offset
             top_left_y = y + self.radius
             top_left_x = x + self.radius
