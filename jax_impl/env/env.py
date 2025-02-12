@@ -319,69 +319,69 @@ class DeliveryDrones:
         return [['←', '↓', '→', '↑', 'X'][i] for i in actions]
 
 
-if __name__ == "__main__":
-    from jax.experimental.compilation_cache import compilation_cache as cc
-    import statistics
-    cc.set_cache_dir('./jax_cache')
-    import sys; sys.path.append('..')
-    from agents.rand import RandomAgent
-    from agents.dqn import DQNAgent
-
-    # grid_size = 8
-    # n_drones = 3
-    # grid_size = 370
-    # n_drones = 4096
-    grid_size = 185
-    n_drones = 1024
-    # grid_size = 64
-    # n_drones = int(0.03 * (grid_size ** 2))
-
-    drone_density = n_drones / (grid_size ** 2)
-    print(f'Num drones: {n_drones}, grid: {grid_size}x{grid_size}, drone density: {drone_density:.2f}')
-
-    params = DroneEnvParams(n_drones=n_drones, grid_size=grid_size)
-    env = DeliveryDrones()
-    # params = DroneEnvParams()
-    # grid_size = int(jnp.ceil(jnp.sqrt(params.n_drones / params.drone_density)))
-    rng = jax.random.PRNGKey(0)
-    agent = RandomAgent()
-    # agent = DQNAgent()
-
-    # #######################
-    # # jit + Python for-loop
-    # #######################
-    # state = env.reset(rng, params)
-    state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
-    step_jit = jax.jit(env.step, static_argnums=(3,))
-    get_obs_jit = jax.jit(env.get_obs)
-    # step_jit = env.step
-    repeats = 5
-    skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
-    num_steps = 100
-    print(f'Running {num_steps:,} steps {repeats} times (skipping {skip} first runs)...')
-    times = []
-    for _ in range(repeats):
-        ts = timer()
-        for i in trange(num_steps):
-            rng, key = jax.random.split(rng)
-            action_keys = jax.random.split(key, params.n_drones)
-            # actions = jax.vmap(agent.act)(action_keys)
-            actions = jax.vmap(agent.act)(action_keys)
-            state, rewards, dones = step_jit(rng, state, actions, params)
-            obs = get_obs_jit(state)
-
-            # # tracing
-            # state, rewards, dones = step_jit(rng, state, actions, params)
-            # state, rewards, dones = step_jit(rng, state, actions, params)
-            # with jax.profiler.trace("jax-trace-v2"):
-            #     state, rewards, dones = step_jit(rng, state, actions, params)
-            #     rewards.block_until_ready()
-            # __import__('pdb').set_trace()
-        te = timer()
-        times.append(te - ts)
-    mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
-    print(f'... jit+for-loop took {mean:.2f}s (±{std:.3f}) or {1000*mean/num_steps:.4f}s/1k steps (±{1000*std/num_steps:.4f})')
-    __import__('pdb').set_trace()
+# if __name__ == "__main__":
+#     from jax.experimental.compilation_cache import compilation_cache as cc
+#     import statistics
+#     cc.set_cache_dir('./jax_cache')
+#     import sys; sys.path.append('..')
+#     from agents.rand import RandomAgent
+#     from agents.dqn import DQNAgent
+#
+#     # grid_size = 8
+#     # n_drones = 3
+#     # grid_size = 370
+#     # n_drones = 4096
+#     grid_size = 185
+#     n_drones = 1024
+#     # grid_size = 64
+#     # n_drones = int(0.03 * (grid_size ** 2))
+#
+#     drone_density = n_drones / (grid_size ** 2)
+#     print(f'Num drones: {n_drones}, grid: {grid_size}x{grid_size}, drone density: {drone_density:.2f}')
+#
+#     params = DroneEnvParams(n_drones=n_drones, grid_size=grid_size)
+#     env = DeliveryDrones()
+#     # params = DroneEnvParams()
+#     # grid_size = int(jnp.ceil(jnp.sqrt(params.n_drones / params.drone_density)))
+#     rng = jax.random.PRNGKey(0)
+#     agent = RandomAgent()
+#     # agent = DQNAgent()
+#
+#     # #######################
+#     # # jit + Python for-loop
+#     # #######################
+#     # state = env.reset(rng, params)
+#     state = jax.jit(env.reset, static_argnums=(1,))(rng, params)
+#     step_jit = jax.jit(env.step, static_argnums=(3,))
+#     get_obs_jit = jax.jit(env.get_obs)
+#     # step_jit = env.step
+#     repeats = 5
+#     skip = 1 if repeats > 1 else 0  # first run is usually a bit slower (warmup)
+#     num_steps = 100
+#     print(f'Running {num_steps:,} steps {repeats} times (skipping {skip} first runs)...')
+#     times = []
+#     for _ in range(repeats):
+#         ts = timer()
+#         for i in trange(num_steps):
+#             rng, key = jax.random.split(rng)
+#             action_keys = jax.random.split(key, params.n_drones)
+#             # actions = jax.vmap(agent.act)(action_keys)
+#             actions = jax.vmap(agent.act)(action_keys)
+#             state, rewards, dones = step_jit(rng, state, actions, params)
+#             obs = get_obs_jit(state)
+#
+#             # # tracing
+#             # state, rewards, dones = step_jit(rng, state, actions, params)
+#             # state, rewards, dones = step_jit(rng, state, actions, params)
+#             # with jax.profiler.trace("jax-trace-v2"):
+#             #     state, rewards, dones = step_jit(rng, state, actions, params)
+#             #     rewards.block_until_ready()
+#             # __import__('pdb').set_trace()
+#         te = timer()
+#         times.append(te - ts)
+#     mean, std = statistics.mean(times[skip:]), statistics.stdev(times[skip:])
+#     print(f'... jit+for-loop took {mean:.2f}s (±{std:.3f}) or {1000*mean/num_steps:.4f}s/1k steps (±{1000*std/num_steps:.4f})')
+#     __import__('pdb').set_trace()
 
     # ############
     # # jit + fori

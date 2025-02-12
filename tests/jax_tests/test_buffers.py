@@ -1,7 +1,7 @@
 import pytest
 import jax.numpy as jnp
 import jax.random
-from buffers import ReplayBuffer, BufferState
+from jax_impl.buffers import ReplayBuffer, BufferState
 
 @pytest.fixture
 def experience_example():

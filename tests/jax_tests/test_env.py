@@ -3,8 +3,8 @@ import jax
 import jax.numpy as jnp
 import jax.random
 
-from env.env import DroneEnvState, DroneEnvParams, DeliveryDrones
-from env.constants import Object, Action
+from jax_impl.env.env import DroneEnvState, DroneEnvParams, DeliveryDrones
+from jax_impl.env.constants import Object, Action
 
 
 ##########

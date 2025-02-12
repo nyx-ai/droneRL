@@ -4,11 +4,12 @@ import numpy as np
 from tqdm import tqdm
 from tabulate import tabulate
 import matplotlib.pyplot as plt
-from env.env import DeliveryDrones
-from env.wrappers import WindowedGridView
-from agents.dqn import DQNAgent, DenseQNetworkFactory
-from agents.random import RandomAgent
 from pprint import pprint
+
+from python.env.env import DeliveryDrones
+from python.env.wrappers import WindowedGridView
+from python.agents.dqn import DQNAgent, DenseQNetworkFactory
+from python.agents.random import RandomAgent
 
 
 def benchmark_implementation(env, config, n_drones, n_steps):
