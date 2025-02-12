@@ -44,7 +44,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r python/requirements.txt
+        pip install -r torch_impl/requirements.txt
 
     - name: Run Tests
       run: pytest tests/torch_tests
@@ -80,7 +80,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r python/requirements.txt
+        pip install -r torch_impl/requirements.txt
         pip install -r jax_impl/requirements.cpu.txt
 
     - name: Run Tests
