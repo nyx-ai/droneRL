@@ -56,12 +56,11 @@ jobs:
         pip install -r torch_impl/requirements.txt
 
     - name: Run Tests
-      run: pytest tests/torch_tests
       env:
         ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
       run: |
         mkdir -p $ARTIFACTS_DIR
-        pytest python/
+        pytest tests/torch_tests
 
     - name: Upload test artifacts
       uses: actions/upload-artifact@v3
