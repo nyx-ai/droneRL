@@ -254,7 +254,7 @@ class Renderer:
         draw_handle = ImageDraw.Draw(metric_panel, mode='RGB')
         number_indent = 6
         draw_handle.text((self.render_padding + 2, self.render_padding), f'Step: {step:>{number_indent},}', fill='black', font=self.font)
-        draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing), 'Rewards', fill='black', font=self.font)
+        draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing), 'Reward sum', fill='black', font=self.font)
         for player_id in range(len(rewards)):
             self.cum_rewards[player_id] += rewards[player_id]
             draw_handle.text((self.render_padding + 2, self.render_padding + self.line_spacing * (2 + player_id)), f'P{player_id:}: {self.cum_rewards[player_id]:>{number_indent + 2}.1f}', fill='black', font=self.font)
