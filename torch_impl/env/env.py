@@ -39,8 +39,7 @@ class DeliveryDrones(Env):
 
     @property
     def drones_list(self):
-        # TODO check if still used?
-        return list(self._drones.values())
+        return list(self.drones.values())
 
     def __init__(self, env_params={}):
         self.action_space = spaces.Discrete(self.NUM_ACTIONS)
