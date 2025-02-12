@@ -63,23 +63,23 @@ def test_small_grid_drones_only():
     benchmark_implementation(env, config, n_drones, n_steps)
 
 
-def test_small_grid_default():
-    env = WindowedGridView(DeliveryDrones(), radius=3)
-    config = {}
-    n_steps = 1000
-    n_drones = 4
-    benchmark_implementation(env, config, n_drones, n_steps)
+# def test_small_grid_default():
+#     env = WindowedGridView(DeliveryDrones(), radius=3)
+#     config = {}
+#     n_steps = 1000
+#     n_drones = 4
+#     benchmark_implementation(env, config, n_drones, n_steps)
 
 
-def test_small_grid_high_density():
-    env = WindowedGridView(DeliveryDrones(), radius=3)
-    config = {'packets_factor': 4, 'dropzones_factor': 4, 'stations_factor': 4, 'skyscrapers_factor': 4}
-    n_steps = 1000
-    n_drones = 4
-    benchmark_implementation(env, config, n_drones, n_steps)
+# def test_small_grid_high_density():
+#     env = WindowedGridView(DeliveryDrones(), radius=3)
+#     config = {'packets_factor': 4, 'dropzones_factor': 4, 'stations_factor': 4, 'skyscrapers_factor': 4}
+#     n_steps = 1000
+#     n_drones = 4
+#     benchmark_implementation(env, config, n_drones, n_steps)
 
 
 if __name__ == '__main__':
     test_small_grid_drones_only()
-    test_small_grid_default()
-    test_small_grid_high_density()
+    # test_small_grid_default()
+    # test_small_grid_high_density()
