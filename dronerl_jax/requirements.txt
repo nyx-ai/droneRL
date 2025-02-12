@@ -1,0 +1,7 @@
+--find-links https://storage.googleapis.com/jax-releases/libtpu_releases.html
+jax[tpu]==0.4.33
+jaxlib==0.4.33
+tqdm==4.67.1
+flax==0.10.2
+safetensors==0.5.2
+pytest==8.3.4

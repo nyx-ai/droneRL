@@ -4,12 +4,13 @@ import numpy as np
 import torch
 import tqdm
 
-from env.env import DeliveryDrones
-from env.wrappers import WindowedGridView
-from helpers.rl_helpers import set_seed
+from python.env.env import DeliveryDrones
+from python.env.wrappers import WindowedGridView
+from python.helpers.rl_helpers import set_seed
 from PIL import Image
 import tempfile
 import aicrowd_helpers
+from python.agents.dqn import BaseDQNFactory
 
 
 class DroneRacerEvaluator:
@@ -23,34 +24,32 @@ class DroneRacerEvaluator:
         self.round = round
 
         ################################################
-        ################################################
         # Evaluation State Variables
         ################################################
         self.EPISODE_SEEDS = [845, 99, 65, 96, 85, 39, 51, 17, 52, 35]
         self.TOTAL_EPISODE_STEPS = 1000
         self.participating_agents = {
-            "baseline-1": "baseline_models/dqn-agent.pt",
-            "baseline-2": "baseline_models/dqn-agent.pt",
-            "baseline-3": "baseline_models/dqn-agent.pt",
-            "baseline-4": "baseline_models/dqn-agent.pt",
-            "baseline-5": "baseline_models/dqn-agent.pt",
+            "baseline-1": "sample_models/dqn-agent-1.safetensors",
+            "baseline-2": "sample_models/dqn-agent-2.safetensors",
+            "baseline-3": "sample_models/dqn-agent-3.safetensors",
+            "baseline-4": "sample_models/dqn-agent-4.safetensors",
+            "baseline-5": "sample_models/dqn-agent-5.safetensors",
         }
 
         self.video_directory_path = tempfile.mkdtemp()
 
-        ################################################
         ################################################
         # Load Baseline models
         ################################################
         self.loaded_agent_models = {}
         for _item in self.participating_agents.keys():
             agent_path = os.path.join(answer_folder_path, self.participating_agents[_item])
-            self.loaded_agent_models[_item] = torch.load(agent_path)
+            self.loaded_agent_models[_item] = BaseDQNFactory.from_checkpoint(agent_path).create_qnetwork()[0]
         # Baseline Models loaded !! Yayy !!
 
-        ################################################
-        # Helper Functions
-        ################################################
+    ################################################
+    # Helper Functions
+    ################################################
 
     def agent_id(self, agent_name):
         """
@@ -89,24 +88,21 @@ class DroneRacerEvaluator:
         print("Video Directory Path : ", self.video_directory_path)
 
         ################################################
-        ################################################
         # Load submission model
         ################################################
 
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device('cpu')
-        model = torch.load(submission_file_path, map_location=device)
+        model = BaseDQNFactory.from_checkpoint(submission_file_path).create_qnetwork()[0]
         self.participating_agents["YOU"] = model
+        self.loaded_agent_models["YOU"] = model
 
         self.overall_scores = []
 
         for _episode_idx, episode_seed in enumerate(self.EPISODE_SEEDS):
             ################################################
-            ################################################
             # Run Episode
             ################################################
             episode_scores = np.zeros(len(self.participating_agents.keys()))
 
-            ################################################
             ################################################
             # Env Instantiation
             ################################################
@@ -142,27 +138,23 @@ class DroneRacerEvaluator:
                 _action_dictionary = {}
 
                 ################################################
-                ################################################
                 # Act on the Env (all agents, one after the other)
                 ################################################
                 for _idx, _agent_name in enumerate(sorted(self.participating_agents.keys())):
-                    agent = self.participating_agents[_agent_name]
+                    agent = self.loaded_agent_models[_agent_name]
 
-                    ################################################
                     ################################################
                     # Gather observation
                     ################################################
                     state_agent = state[_idx]
 
                     ################################################
-                    ################################################
                     # Decide action of the participating agent
                     ################################################
-                    q_values = model([state_agent])[0]
+                    q_values = agent([state_agent])[0]
                     action = q_values.argmax().item()
 
                     _action_dictionary[_idx] = action
-                    ################################################
                     ################################################
                     # Collect frames for the first episode to generate video
                     ################################################
@@ -172,11 +164,14 @@ class DroneRacerEvaluator:
                             # Record videos with env.render
                             # Do it in a tempfile
                             # Compile frames into a video (from flatland)
-                            _step_frame_im = Image.fromarray(env.render(mode='rgb_array'))
+
+                            # TODO actual env image generation
+                            _step_frame_im = Image.fromarray(np.random.randint(low=0, high=255, size=(250, 250), dtype=np.uint8))
+                            # _step_frame_im = Image.fromarray(env.render(mode='rgb_array'))
                             _step_frame_im.save("{}/{}.jpg".format(self.video_directory_path, str(_step).zfill(4)))
 
                 # Perform action (on all agents)
-                state, rewards, done, info = env.step(_action_dictionary)
+                state, rewards, _, _, _ = env.step(_action_dictionary)
 
                 # Gather rewards for all agents (inside episode_score)
                 _step_score = np.array(list(rewards.values()))  # Check with florian about ordering
@@ -195,8 +190,6 @@ class DroneRacerEvaluator:
         print("Videos : ", video_output_path, video_thumb_output_path)
 
         # Aggregate all scores into an overall score
-        # TODO : Add aggregation function (lets start with simple mean + std)
-
         self.overall_scores = np.array(self.overall_scores)
         # Compute participant means and stds across episodes
         _score = self.overall_scores.mean(axis=0)
@@ -227,7 +220,7 @@ if __name__ == "__main__":
     # and a sample submission is present at data/sample_submission.csv
     answer_file_path = "."
     _client_payload = {}
-    _client_payload["submission_file_path"] = "baseline_models/dqn-agent.pt"
+    _client_payload["submission_file_path"] = "sample_models/dqn-agent-1.safetensors"
     _client_payload["aicrowd_submission_id"] = 1123
     _client_payload["aicrowd_participant_id"] = 1234
 

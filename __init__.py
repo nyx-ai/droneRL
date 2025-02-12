@@ -1,1 +1,0 @@
-from .drone_evaluator import DroneRacerEvaluator
