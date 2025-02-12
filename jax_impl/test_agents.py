@@ -39,7 +39,7 @@ def test_dqn_agent_act(dqn_agent, obs):
     assert action.shape == ()
     assert action.dtype == jnp.int32
 
-@pytest.mark.focus
+# @pytest.mark.focus
 def test_dqn_agent_save(dqn_agent, obs):
     env_params = DroneEnvParams()
     ag_params = DQNAgentParams()
@@ -57,7 +57,7 @@ def test_dqn_agent_save(dqn_agent, obs):
     out_after = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
     assert jnp.allclose(out_before, out_after)
 
-@pytest.mark.focus
+# @pytest.mark.focus
 def test_dqn_agent_torch_save(dqn_agent, obs):
     env_params = DroneEnvParams()
     ag_params = DQNAgentParams()
