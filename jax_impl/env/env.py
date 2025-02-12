@@ -3,11 +3,9 @@ import jax
 import jax.numpy as jnp
 import jax.random
 import jax.nn
-from tqdm import trange
 from flax.struct import dataclass
-from timeit import default_timer as timer
 
-from .constants import Action, Object
+from common.constants import Action, Object
 
 
 @dataclass

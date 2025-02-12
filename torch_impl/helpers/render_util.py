@@ -6,7 +6,7 @@ from tqdm import trange
 import os
 import tempfile
 import numpy as np
-from jax.env.render import Renderer
+from common.render import Renderer
 from env.env import DeliveryDrones
 from env.wrappers import WindowedGridView
 from agents.random import RandomAgent

@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import jax.random
 
 from jax_impl.env.env import DroneEnvState, DroneEnvParams, DeliveryDrones
-from jax_impl.env.constants import Object, Action
+from common.constants import Object, Action
 
 
 ##########

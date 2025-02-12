@@ -11,12 +11,8 @@ from safetensors.numpy import save_file, load_file
 from safetensors import safe_open
 from flax.traverse_util import flatten_dict, unflatten_dict
 
-# from jax_impl.env.env import DroneEnvParams
-# from jax_impl.env.constants import Action
 from ..env.env import DroneEnvParams
-from ..env.constants import Action
-# from env.env import DroneEnvParams
-# from env.constants import Action
+from common.constants import Action
 
 
 

@@ -10,7 +10,7 @@ from collections import defaultdict
 import statistics
 
 from env.env import DroneEnvParams, DeliveryDrones
-from env.constants import Action
+from ..common.constants import Action
 from agents.dqn import DQNAgent, DQNAgentParams
 from buffers import ReplayBuffer
 

@@ -8,7 +8,7 @@ import numpy as np
 from tqdm import trange
 import logging
 
-from env.render import Renderer
+from common.render import Renderer
 from env.env import DroneEnvParams, DeliveryDrones
 from agents.dqn import DQNAgent, DQNAgentState
 

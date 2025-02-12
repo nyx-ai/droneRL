@@ -4,10 +4,9 @@ import jax.numpy as jnp
 import jax.random
 import tempfile
 
-from jax_impl.env.env import DroneEnvState, DroneEnvParams, DeliveryDrones
-from jax_impl.env.constants import Object, Action
+from jax_impl.env.env import DroneEnvParams, DeliveryDrones
 from jax_impl.agents.rand import RandomAgent
-from jax_impl.agents.dqn import DQNAgent, DQNAgentParams, DQNAgentState
+from jax_impl.agents.dqn import DQNAgent, DQNAgentParams
 
 
 @pytest.fixture
