@@ -107,7 +107,7 @@ class DQNAgent():
             next_q_values = ag_state.target_qnetwork.apply(
                     ag_state.target_qnetwork_params,
                     batch['next_obs'])
-            next_q_value = jnp.max(next_q_values)
+            next_q_value = jnp.max(next_q_values, axis=1)
 
             # Bellman equation
             td_target = batch['rewards'] + ag_params.gamma * next_q_value * (1 - batch['dones'])
