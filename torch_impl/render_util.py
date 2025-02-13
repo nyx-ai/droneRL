@@ -41,6 +41,6 @@ def convert_for_rendering(env):
     for pos, drone in sorted(env.drones.items(), key=lambda x: x[1].index):
         y, x = pos
         air[y, x] = drone.index
-        carrying_package.append(1 if drone.packet else 0)
+        carrying_package.append(drone.packet)
         charge.append(drone.charge)
     return ground, air, carrying_package, charge
