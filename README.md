@@ -1,21 +1,25 @@
-Climbing the Ladder: Reinforcement Learning in a Competitive Setting
----
+# 🚁 DroneRL
 
-Workshop @ [AMLD 2024](https://2024.appliedmldays.org/)
+DroneRL is a reinforcement learning environment in which agents can be trained for optimal package delivery. 
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/MasterScrat/droneRL-workshop)
+This environment is implemented in both PyTorch and JAX.
 
-**Slides**
+![output](https://github.com/user-attachments/assets/2d05a3f9-f2be-4b37-8fae-d497930f3deb)
 
-- [01 - What is RL?](https://docs.google.com/presentation/d/1A5HQ7PuARquqfdiFJNFZO28iofQyurCG-Rhfog_1UoU)
-- [02 - The DroneDeliveries environment](https://docs.google.com/presentation/d/1KKi_aN8bpdLjD-oHiqzeqqNYpaV3A0mYmq4iOwhJaRg)
-- [03 - DQN intro](https://docs.google.com/presentation/d/1vWxy03g0_XOkUyNhwvTzgwYgbwBG4K-ngZD2vK-tk80)
-- [04 - Going further](https://docs.google.com/presentation/d/1KOuhH5ZaPfaGAlwQiQG1fHnwz3C7Y4ZET5dCj42HkeE)
+🥇 There is a public leaderboard for this problem, check it out on [AIcrowd](https://www.aicrowd.com/challenges/dronerl/leaderboards).
 
-**Credits**
+## Getting started
+*coming soon*
 
-Authors: @MasterScrat, @pacm, @metataro
-
-Contributors: @spMohanty, @mar-muel
-
+## Credits
 Part of this work was supported by the [EPFL Extension School](http://exts.epfl.ch/) and [AIcrowd](http://aicrowd.com/).
+
+This more optimized version of DroneRL was implemented by [@MasterScrat](https://github.com/masterScrat) and [@mar-muel](https://github.com/mar-muel/), but over the years many people have contributed:
+* [@spMohanty](https://github.com/spmohanty)
+* [@pacm](https://github.com/pacm)
+* [@metataro](https://github.com/metataro)
+
+## License
+* 16ShipCollection by master484 under Public Domain / CC0
+* Inconsolata-Bold by Raph Levien under Open Font License
+* Press Start 2P by Cody Boisclair under SIL Open Font License 1.1
