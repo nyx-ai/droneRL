@@ -34,13 +34,13 @@ def convert_for_rendering(env):
         ground[y, x] = Object.PACKET
 
     air = np.full((side_size, side_size), None)
+
     carrying_package = []
     charge = []
-    for drone_idx, ((y, x), drone) in enumerate(env.drones.items()):
-        air[y, x] = drone_idx
-        if drone.packet:
-            carrying_package.append(1)
-        else:
-            carrying_package.append(0)
+    # We sort the drones by index to ensure the order is consistent
+    for pos, drone in sorted(env.drones.items(), key=lambda x: x[1].index):
+        y, x = pos
+        air[y, x] = drone.index
+        carrying_package.append(1 if drone.packet else 0)
         charge.append(drone.charge)
     return ground, air, carrying_package, charge

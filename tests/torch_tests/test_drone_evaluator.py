@@ -1,6 +1,6 @@
 import numpy as np
 from drone_evaluator import DroneRacerEvaluator
-
+from pprint import pprint
 
 def test_evaluate_baseline_1():
     evaluator = DroneRacerEvaluator()
@@ -11,6 +11,7 @@ def test_evaluate_baseline_1():
     }
 
     result = evaluator._evaluate(client_payload)
+    pprint(result)
     assert "score" in result
     assert "score_secondary" in result
     assert "media_video_path" in result
@@ -27,9 +28,13 @@ def test_evaluate_baseline_2():
     }
 
     result = evaluator._evaluate(client_payload)
+    pprint(result)
     assert "score" in result
     assert "score_secondary" in result
     assert "media_video_path" in result
     assert isinstance(result["score"], (float, np.float64))
     assert np.isclose(result["score"], -73.26000000000008)
     assert np.isclose(result["score_secondary"], 6.620604202034626)
+
+if __name__ == "__main__":
+    test_evaluate_baseline_1()

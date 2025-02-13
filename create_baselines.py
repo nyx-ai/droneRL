@@ -12,8 +12,9 @@ from torch_impl.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFa
 def create_baseline_models(num_models=5, num_steps=1000):
     # Create environment
     env_params = {
-        'n_drones': 3,
+        'n_drones': 8,
         'drone_density': 0.05,
+        'pickup_reward': 0.5,
         'packets_factor': 3,
         'dropzones_factor': 2,
         'stations_factor': 2,
@@ -23,20 +24,31 @@ def create_baseline_models(num_models=5, num_steps=1000):
 
     # Create factory with different architectures for each baseline
     obs_shape = env.observation_space.shape
-    action_shape = env.action_space.n
+    action_shape = (env.action_space.n,)
     factories = [
-        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[32]),
-        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[64]),
-        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[32, 32]),
-        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[64, 32]),
-        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=[64, 64]),
-        ConvQNetworkFactory(obs_shape, action_shape, conv_layers=[{'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}], dense_layers=[8, 8, 8])
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=(16,)),
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=(16, 16)),
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=(32, 32)),
+        DenseQNetworkFactory(obs_shape, action_shape, hidden_layers=(64, 32)),
+        ConvQNetworkFactory(
+            obs_shape,
+            action_shape,
+            conv_layers=[{'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}],
+            dense_layers=(16, 16)
+        ),
+        ConvQNetworkFactory(
+            obs_shape,
+            action_shape,
+            conv_layers=[
+                {'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},
+                {'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1}
+            ],
+            dense_layers=(32, 16)),
     ]
 
     # Create and save models
     for i in range(num_models):
-        print(
-            f"\nTraining model {i+1}/{num_models}")
+        print(f"\nTraining model {i+1}/{num_models}")
         agent = DQNAgent(
             env=env,
             dqn_factory=factories[i % len(factories)],
@@ -55,9 +67,8 @@ def create_baseline_models(num_models=5, num_steps=1000):
         episode_rewards = []
         start_time = time.time()
 
-        for step in tqdm.tqdm(range(num_steps), desc="Training"):
-            actions = {j: agent.act(state[j])
-                       for j in range(env_params['n_drones'])}
+        for step in tqdm.tqdm(range(num_steps)):
+            actions = {j: agent.act(state[j]) for j in range(env_params['n_drones'])}
             next_state, rewards, dones, _, _ = env.step(actions)
 
             # Learn from experience
@@ -69,20 +80,15 @@ def create_baseline_models(num_models=5, num_steps=1000):
             # Log progress
             if step > 0 and step % 100 == 0:
                 avg_reward = total_reward / (step * env_params['n_drones'])
-                elapsed = time.time() - start_time
-                print(
-                    f"\nStep {step}: Avg reward = {avg_reward:.3f}, Time elapsed = {elapsed:.1f}s")
                 episode_rewards.append(avg_reward)
 
             state = next_state
 
         # Save model
-        save_path = os.path.join(os.path.dirname(
-            __file__), 'sample_models', f'dqn-agent-{i+1}.safetensors')
+        save_path = os.path.join(os.path.dirname(__file__), 'sample_models', f'dqn-agent-{i+1}.safetensors')
         agent.save(save_path)
         print(f"Saved model {i+1} to {save_path}")
-        print(
-            f"Final average reward: {total_reward / (num_steps * env_params['n_drones']):.3f}")
+        print(f"Final average reward: {total_reward / (num_steps * env_params['n_drones']):.3f}")
 
 
 if __name__ == "__main__":
