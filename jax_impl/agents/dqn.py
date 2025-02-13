@@ -18,7 +18,6 @@ from common.constants import Action
 
 @dataclass
 class DQNAgentParams:
-    batch_size: int = 1
     hidden_layers: Tuple[int, ...] = (32, 32)
     gamma: float = 0.95
     epsilon_start: float = 1.0
