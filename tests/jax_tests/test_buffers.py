@@ -76,3 +76,53 @@ def test_can_sample(buffer, filled_buffer_state, buffer_state):
     assert buffer.can_sample(filled_buffer_state)
     assert not buffer.can_sample(buffer_state)
 
+
+@pytest.mark.focus
+def test_add_many_experiences(buffer, buffer_state, experience_example):
+    """Tests adding multiple experiences at once to the buffer."""
+    # Create a batch of experiences
+    batch_size = 5
+    batch_experiences = {
+        key: jnp.stack([value + i for i in range(batch_size)])
+        for key, value in experience_example.items()
+    }
+
+    # Add the batch to the buffer
+    new_state = buffer.add_many(buffer_state, batch_experiences)
+
+    # Test that indices and size updated correctly
+    assert new_state.current_idx == batch_size
+    assert new_state.current_size == batch_size
+
+    # Verify all experiences were stored correctly
+    for i in range(batch_size):
+        for key in experience_example:
+            assert jnp.all(new_state.experiences[key][i] == experience_example[key] + i)
+
+    # Test wrapping behavior
+    # Create a batch that will wrap around the buffer
+    wrap_size = 3
+    start_idx = buffer.buffer_size - wrap_size
+    wrap_state = buffer_state.replace(current_idx=jnp.array(start_idx))
+
+    wrap_experiences = {
+        key: jnp.stack([value + i for i in range(batch_size)])
+        for key, value in experience_example.items()
+    }
+
+    wrapped_state = buffer.add_many(wrap_state, wrap_experiences)
+
+    # Check that index wrapped correctly
+    expected_idx = (start_idx + batch_size) % buffer.buffer_size
+    assert wrapped_state.current_idx == expected_idx
+
+    # Verify experiences at the end of buffer
+    for i in range(wrap_size):
+        idx = start_idx + i
+        for key in experience_example:
+            assert jnp.all(wrapped_state.experiences[key][idx] == experience_example[key] + i)
+
+    # Verify wrapped experiences at start of buffer
+    for i in range(batch_size - wrap_size):
+        for key in experience_example:
+            assert jnp.all(wrapped_state.experiences[key][i] == experience_example[key] + (wrap_size + i))

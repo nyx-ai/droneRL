@@ -53,6 +53,28 @@ class ReplayBuffer:
                 )
         return state
 
+    def add_many(
+            self,
+            state: BufferState,
+            experiences: Dict[str, jnp.ndarray]
+            ):
+        num_experiences = jax.tree_util.tree_leaves(experiences)[0].shape[0]
+        indices = (state.current_idx + jnp.arange(num_experiences)) % self.buffer_size
+
+        experiences = jax.tree_util.tree_map(
+                lambda experience_field, batch_field: experience_field.at[indices].set(
+                    batch_field
+                    ),
+                state.experiences,
+                experiences,
+                )
+        state = state.replace(
+                experiences=experiences,
+                current_idx=(state.current_idx + num_experiences) % self.buffer_size,
+                current_size=jnp.minimum(state.current_size + num_experiences, self.buffer_size),
+                )
+        return state
+
     def sample(self, key: jnp.ndarray, state: BufferState):
         indices = jax.random.randint(
             key,
