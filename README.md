@@ -6,18 +6,19 @@ DroneRL is a reinforcement learning environment in which agents can be trained f
 
 Resources for the participants of the AMLD 2025 workshop.
 
-### Jax Intro
+🥇 [Public Leaderboard](https://www.aicrowd.com/challenges/dronerl/leaderboards) on AIcrowd
+
+### Part 1: Jax Intro
 
 * [Slides](https://docs.google.com/presentation/d/1MA0MNUn9wSk8Lel2tQHWPr-Vi76kyNj7QAFhv8COw_U)
 * [Notebook](https://colab.research.google.com/drive/1oVr-1XZ0PkFUKVpRxFd8E4G0TWTjzGkz)
 
-### RL Crash Course
+### Part 2: RL Crash Course
 
 * [Slides](https://docs.google.com/presentation/d/1OcUbsZ9dtyBvT6anfnkduMZZ-07Si8WZO98dfsFRWUI)
 * [Notebook](https://colab.research.google.com/drive/14-2dIwbvu0IZrx78oCRFFpSVCp9IhSbv)
-* 🥇 [Public Leaderboard](https://www.aicrowd.com/challenges/dronerl/leaderboards) on AIcrowd
 
-### DroneRL in JAX
+### Part 3: DroneRL in JAX
 
 * [Slides]()
 * [Notebook]()
