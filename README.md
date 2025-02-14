@@ -20,8 +20,8 @@ DroneRL is a reinforcement learning environment in which agents can be trained f
 
 ### Part 3: DroneRL in JAX
 
-* [Slides]()
-* [Notebook]()
+* [Slides](https://docs.google.com/presentation/d/1hX168tg_hkCf1y-AtMFtigD_pDDseKYEVz4Vcn2i8UM)
+* [Notebook](https://colab.research.google.com/drive/1NqY2IZi01sKTzva3QM4FmuPBKy-0U_DN)
 
 ![output](https://github.com/user-attachments/assets/2d05a3f9-f2be-4b37-8fae-d497930f3deb)
 
