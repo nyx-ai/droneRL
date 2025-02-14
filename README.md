@@ -1,10 +1,10 @@
 # 🚁 DroneRL
 
-DroneRL is a reinforcement learning environment in which agents can be trained for optimal package delivery. 
-
-This environment is implemented in both PyTorch and JAX.
+DroneRL is a reinforcement learning environment in which agents can be trained for optimal package delivery. This environment is implemented in both PyTorch and JAX.
 
 ## AMLD 2025 Workshop: *Training models in JAX: JIT all the things!*
+
+Resources for the participants of the AMLD 2025 workshop.
 
 ### Jax Intro
 
@@ -13,12 +13,14 @@ This environment is implemented in both PyTorch and JAX.
 
 ### RL Crash Course
 
-* [Slides](https://docs.google.com/presentation/d/1OcUbsZ9dtyBvT6anfnkduMZZ-07Si8WZO98dfsFRWUI/edit)
+* [Slides](https://docs.google.com/presentation/d/1OcUbsZ9dtyBvT6anfnkduMZZ-07Si8WZO98dfsFRWUI)
 * [Notebook](https://colab.research.google.com/drive/14-2dIwbvu0IZrx78oCRFFpSVCp9IhSbv)
+🥇 [Public Leaderboard](https://www.aicrowd.com/challenges/dronerl/leaderboards) on AIcrowd
 
-### Leaderboard
+### DroneRL in JAX
 
-🥇 [AIcrowd Public Leaderboard](https://www.aicrowd.com/challenges/dronerl/leaderboards)
+* [Slides]()
+* [Notebook]()
 
 ![output](https://github.com/user-attachments/assets/2d05a3f9-f2be-4b37-8fae-d497930f3deb)
 
