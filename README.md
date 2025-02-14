@@ -4,7 +4,7 @@ DroneRL is a reinforcement learning environment in which agents can be trained f
 
 ## AMLD 2025 Workshop: *Training models in JAX: JIT all the things!*
 
-Resources for the participants of the AMLD 2025 workshop.
+*Resources for the participants of the AMLD 2025 workshop.*
 
 🥇 [Public Leaderboard](https://www.aicrowd.com/challenges/dronerl/leaderboards) on AIcrowd
 
