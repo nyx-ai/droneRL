@@ -15,7 +15,7 @@ Resources for the participants of the AMLD 2025 workshop.
 
 * [Slides](https://docs.google.com/presentation/d/1OcUbsZ9dtyBvT6anfnkduMZZ-07Si8WZO98dfsFRWUI)
 * [Notebook](https://colab.research.google.com/drive/14-2dIwbvu0IZrx78oCRFFpSVCp9IhSbv)
-🥇 [Public Leaderboard](https://www.aicrowd.com/challenges/dronerl/leaderboards) on AIcrowd
+* 🥇 [Public Leaderboard](https://www.aicrowd.com/challenges/dronerl/leaderboards) on AIcrowd
 
 ### DroneRL in JAX
 
