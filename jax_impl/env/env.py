@@ -54,11 +54,9 @@ class DeliveryDrones:
         # pos = jax.random.choice(key, params.grid_size ** 2, shape=fill_values.shape, p=p_choice, replace=False)
 
         # new method
-        # noise = jax.random.gumbel(key, shape=(params.grid_size ** 2,))
         noise = jax.random.uniform(key, shape=(params.grid_size ** 2,))
         scores = jnp.log(p_choice) + noise
-        # _, pos = jax.lax.top_k(scores, k=fill_values.shape[0])
-        _, pos = jax.lax.approx_max_k(scores, fill_values.shape[0])
+        _, pos = jax.lax.top_k(scores, k=fill_values.shape[0])
 
         random_x_pos = pos // params.grid_size
         random_y_pos = pos % params.grid_size
