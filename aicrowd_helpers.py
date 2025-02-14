@@ -124,7 +124,7 @@ def generate_movie_from_frames(frames_folder):
         ffmpeg_path +
         " -r 7 -start_number 0 -i " +
         frames_path +
-        " -c:v libx264 -vf fps=4 -pix_fmt yuv420p -s 320x320 " +
+        " -c:v libx264 -vf fps=7 -pix_fmt yuv420p -s 320x320 " +
         thumb_output_path
     )
     if return_code != 0:
@@ -138,7 +138,7 @@ def generate_movie_from_frames(frames_folder):
         ffmpeg_path +
         " -r 7 -start_number 0 -i " +
         frames_path +
-        " -c:v libx264 -vf fps=4 -pix_fmt yuv420p -s 600x600 " +
+        " -c:v libx264 -vf fps=7 -pix_fmt yuv420p -s 600x600 " +
         output_path
     )
     if return_code != 0:
