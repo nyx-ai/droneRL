@@ -10,6 +10,7 @@ from common.constants import Action
 from torch_impl.render_util import convert_for_rendering
 from torch_impl.agents.random import RandomAgent
 from pprint import pprint
+
 # Setup the env
 env_params = {
     'n_drones': 8,
