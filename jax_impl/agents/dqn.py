@@ -46,7 +46,7 @@ class DenseQNetwork(nn.Module):
     @nn.compact
     def __call__(self, x):
         for n_features in self.hidden_layers:
-            x = nn.Dense(n_features)(x)
+            x = nn.Dense(n_features, kernel_init=nn.initializers.he_normal())(x)
             x = nn.relu(x)
         x = nn.Dense(Action.num_actions())(x)
         return x
