@@ -84,14 +84,14 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
 
     rewards_log = {}
     if train:
-        agents = {drone.index: RandomAgent(imp.env) for drone in imp.env.drones}
+        agents = {drone.index: RandomAgent(imp.env) for drone in imp.env.drones_list}
         rewards_log = {key: [] for key in agents.keys()}
         agents[0] = DQNAgent(
             env=imp.env,
             dqn_factory=DenseQNetworkFactory(
                 imp.env.observation_space.shape,
                 (imp.env.action_space.n,),
-                hidden_layers=(16) * 2
+                hidden_layers=(16,)
             ),
             gamma=0.95,
             epsilon_start=1.0,
@@ -113,7 +113,7 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
         if train:
             actions = {key: agent.act(states[key]) for key, agent in agents.items()}
         else:
-            actions = {drone.index: imp.env.action_space.sample() for drone in imp.env.drones}
+            actions = {drone.index: imp.env.action_space.sample() for drone in imp.env.drones_list}
         total_time_act += time.perf_counter() - time_act_start
 
         time_env_start = time.perf_counter()
@@ -148,7 +148,6 @@ def benchmark_implementation(imp, config, n_drones, n_steps, train):
     key = (config.name, n_drones)
     if imp.name == "v1":
         reference_speeds[key] = mean_time
-    percent_diff = (reference_speeds[key] / mean_time) if key in reference_speeds else 0
 
     results.append([
         imp.name, config.name, n_drones, f"{imp.env.side_size}x{imp.env.side_size}", f"{mean_time:.2f} spKs",
