@@ -49,19 +49,12 @@ class WindowedGridView(gym.ObservationWrapper):
 
     def observation(self, _):
         # Compute full padded grid size
-        full_size = self.env.side_size + 2 * self.radius
-        padded_grid = np.zeros((full_size, full_size, 6), dtype=np.float32)
-
-        # Mark walls as obstacles initially
-        padded_grid[:, :, 5] = 1
-
-        # Reference to the actual grid part excluding padding
-        grid = padded_grid[self.radius:-self.radius, self.radius:-self.radius]
+        grid = np.zeros((self.env.side_size, self.env.side_size, 6), dtype=np.float32)
 
         # Mark drones, packets, dropzones, stations, obstacles
         for (y, x), drone in self.env.drones.items():
             grid[y, x, 0] = 1
-            if drone.packet is not None:
+            if drone.packet:
                 grid[y, x, 1] = 1
             grid[y, x, 4] = drone.charge / 100
 
@@ -76,6 +69,15 @@ class WindowedGridView(gym.ObservationWrapper):
 
         for (y, x) in self.env.skyscrapers.keys():
             grid[y, x, 5] = 1
+
+        # Larger grid to include parts outside of the walls
+        padded_size = self.env.side_size + 2 * self.radius
+        padded_shape = (padded_size, padded_size, 6)
+        padded_grid = np.zeros(padded_shape)
+        padded_grid[:, :, 5] = 1
+
+        # Reference to the actual grid part excluding padding
+        grid = padded_grid[self.radius:-self.radius, self.radius:-self.radius] = grid
 
         states = {}
         # Extract windowed views for each drone
