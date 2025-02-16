@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, Union, Literal
+from typing import Tuple, Dict, Union, Optional
 import ast
 import jax
 import jax.random
@@ -23,9 +23,10 @@ class DQNAgentParams:
     epsilon_start: float = 1.0
     epsilon_decay: float = 0.999
     epsilon_end: float = 0.01
+    epsilon_decay_every: Optional[int] = None  # decay epsilon after every n steps of training. By default decay at episode end
     learning_rate: float = 1e-3
-    target_update_interval: int = 5       # interval for updating target network
-    tau: float = 1.0                      # EMA decay rate / smoothing coef for target network
+    target_update_interval: int = 5            # interval for updating target network
+    tau: float = 1.0                           # EMA decay rate / smoothing coef for target network
 
 
 @dataclass
@@ -134,6 +135,12 @@ class DQNAgent():
             ag_state.target_qnetwork_params,
             ag_params.tau)
         return ag_state.replace(target_qnetwork_params=target_params)
+
+    def should_update_epsilon(self, ag_params: DQNAgentParams, step: jnp.ndarray, done: jnp.ndarray):
+        if ag_params.epsilon_decay_every is None:
+            return done
+        else:
+            return step % ag_params.epsilon_decay_every == 0
 
     def update_epsilon(self, ag_state: DQNAgentState, ag_params: DQNAgentParams):
         epsilon = jnp.maximum(ag_state.epsilon * ag_params.epsilon_decay, ag_params.epsilon_end)
