@@ -309,9 +309,35 @@ class DeliveryDrones:
         obs = obs.at[:, :, :, 4].set((obs_charge - 1).clip(0, 100) / 100.0)
         return obs
 
-    def format_action(self, *actions):
+    def format_action(self, actions: jnp.ndarray):
         return [['←', '↓', '→', '↑', 'X'][i] for i in actions]
 
+    def print_board(self, env_state: DroneEnvState):
+        board = jax.device_get(env_state.ground).copy()
+        for i, (x, y) in enumerate(zip(env_state.air_x, env_state.air_y)):
+            board[y, x] = 100 + i  # Use high values for drones
+        board_str = ""
+        EMOJI_MAP = {
+                0: "⬜",  # Empty ground
+                Object.SKYSCRAPER: "🏢",
+                Object.STATION: "🔌",
+                Object.DROPZONE: "📍",
+                Object.PACKET: "📦",
+                }
+        for y in range(board.shape[0]):
+            for x in range(board.shape[1]):
+                value = board[y, x]
+                if value >= 100:
+                    drone_index = value - 100
+                    if env_state.carrying_package[drone_index]:
+                        drone_emoji = f'📦{drone_index}'
+                    else:
+                        drone_emoji = f'P{drone_index}'
+                    board_str += drone_emoji + " "
+                else:
+                    board_str += EMOJI_MAP.get(value, "❓") + " "
+            board_str += "\n"
+        print(board_str)
 
 # if __name__ == "__main__":
 #     from jax.experimental.compilation_cache import compilation_cache as cc
