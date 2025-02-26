@@ -1,4 +1,6 @@
 import random
+from jax.lax import pbroadcast
+import numpy as np
 import gym.spaces as spaces
 import math
 from gym import Env
@@ -233,6 +235,56 @@ class DeliveryDrones(Env):
 
     def render(self, mode='ansi'):
         return self.__str__()
+
+    def format_actions(self, actions: dict):
+        # LEFT = 0
+        # DOWN = 1
+        # RIGHT = 2
+        # UP = 3
+        # STAY = 4
+        return {d: ['←', '↓', '→', '↑', 'X'][i] for d, i in actions.items()}
+
+    def print_board(self):
+        board = np.zeros((self.side_size, self.side_size), dtype=np.int32)
+
+        # Mark objects on the board
+        for (y, x) in self.skyscrapers:
+            board[y, x] = 2  # Skyscraper
+        for (y, x) in self.stations:
+            board[y, x] = 3  # Station
+        for (y, x) in self.dropzones:
+            board[y, x] = 4  # Dropzone
+        for (y, x) in self.packets:
+            board[y, x] = 5  # Packet
+
+        # Place drones
+        for ((y, x), drone) in self.drones.items():
+            board[y, x] = 100 + drone.index  # Assign a high value for drones
+
+        EMOJI_MAP = {
+            0: "⬜",  # Empty ground
+            2: "🏢",
+            3: "🔌",
+            4: "📍",
+            5: "📦",
+        }
+
+        board_str = ""
+        for y in range(self.side_size):
+            for x in range(self.side_size):
+                value = board[y, x].item()
+                if value >= 100:
+                    drone_index = value - 100
+                    drone = list(self.drones.values())[drone_index]
+                    if drone.packet:
+                        drone_emoji = f'📦{drone_index}'
+                    else:
+                        drone_emoji = f'P{drone_index}'
+                    board_str += drone_emoji + " "
+                else:
+                    board_str += EMOJI_MAP.get(value, "❓") + " "
+            board_str += "\n"
+        print(board_str)
 
     def __str__(self):
         lines = ["_" * self.shape[0] * 2]
