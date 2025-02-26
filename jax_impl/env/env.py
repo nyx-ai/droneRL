@@ -50,9 +50,6 @@ class DeliveryDrones:
             p_choice &= ~exclude_mask
         p_choice = p_choice.ravel()
 
-        # old method
-        # pos = jax.random.choice(key, params.grid_size ** 2, shape=fill_values.shape, p=p_choice, replace=False)
-
         # new method
         noise = jax.random.uniform(key, shape=(params.grid_size ** 2,))
         scores = jnp.log(p_choice) + noise
@@ -76,14 +73,11 @@ class DeliveryDrones:
         if exclude is not None:
             p_choice &= ~exclude
         p_choice = p_choice.ravel()
-        # pos = jax.random.choice(key, params.grid_size ** 2, shape=(params.n_drones,), p=p_choice, replace=False)
 
         # new method
-        # noise = jax.random.gumbel(key, shape=(params.grid_size ** 2,))
         noise = jax.random.uniform(key, shape=(params.grid_size ** 2,))
         scores = jnp.log(p_choice) + noise
-        # _, pos = jax.lax.top_k(scores, k=params.n_drones)
-        _, pos = jax.lax.approx_max_k(scores, params.n_drones)
+        _, pos = jax.lax.top_k(scores, k=params.n_drones)
 
         random_x_pos = pos // params.grid_size
         random_y_pos = pos % params.grid_size
