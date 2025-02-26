@@ -102,7 +102,9 @@ class DQNAgent():
         def compute_loss(network_params):
             # Q-values for current state (network)
             q_values = ag_state.qnetwork.apply(network_params, batch['obs'])
-            q_value = jnp.take(q_values, batch['actions'])
+            # q_values are (BS, 5), actions are (BS,) - we need (BS, 1) for take_along_axis to work
+            q_value = jnp.take_along_axis(q_values, jnp.expand_dims(batch['actions'], axis=1), axis=1)
+            q_value = jnp.squeeze(q_value)
 
             # Q-values for next state (target network)
             next_q_values = ag_state.target_qnetwork.apply(
