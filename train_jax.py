@@ -25,26 +25,27 @@ cc.set_cache_dir('./jax_cache')
 def train_jax(args: argparse.Namespace):
     @jax.jit
     def _train(carry, _):
-        rng, env_state, obs, ag_state, bstate, step = carry
+        rng, env_states, obs, ag_state, bstate, step = carry
 
+        # generate random actions for all drones in all envs
         rng, key = jax.random.split(rng)
-        # generate random actions for all drones
-        actions = jax.random.randint(key, (env_params.n_drones,), minval=0, maxval=Action.num_actions())
+        actions = jax.random.randint(key, (args.num_envs, env_params.n_drones,), minval=0, maxval=Action.num_actions())
 
-        # run action for DQN agent
+        # run action for DQN agent in all envs
+        act_keys = jax.random.split(rng, args.num_envs)
+        dqn_actions = jax.vmap(dqn_agent.act, in_axes=(0, 0, None))(act_keys, obs, ag_state)
+        actions = actions.at[:, 0].set(dqn_actions)
+
+        # perform actions in envs
         rng, key = jax.random.split(rng)
-        dqn_action = dqn_agent.act(key, obs, ag_state)
-        actions = actions.at[0].set(dqn_action)
-
-        # perform actions in env
-        env_state, rewards, dones = env.step(key, env_state, actions, env_params)
-
-        next_obs = env.get_obs(env_state, env_params)
-        next_obs = next_obs[0].ravel()
+        env_step_keys = jax.random.split(key, args.num_envs)
+        env_states, rewards, dones = jax.vmap(env.step, in_axes=(0, 0, 0, None))(env_step_keys, env_states, actions, env_params)
+        next_obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
+        next_obs = next_obs[:, 0, :, :].reshape(args.num_envs, -1)  # only consider obs from agent 0
 
         # add to buffer
-        exp = {'obs': obs, 'actions': actions[0], 'rewards': rewards[0], 'next_obs': next_obs, 'dones': dones[0]}
-        bstate = buffer.add(bstate, exp)
+        exps = {'obs': obs, 'actions': actions[:, 0], 'rewards': rewards[:, 0], 'next_obs': next_obs, 'dones': dones[:, 0]}
+        bstate = buffer.add_many(bstate, exps)
 
         # train step
         def train_if_can_sample(args):
@@ -79,21 +80,21 @@ def train_jax(args: argparse.Namespace):
                 )
 
         # reset env
-        def _reset_env(key):
-            env_state = env.reset(key, env_params)
-            next_obs = env.get_obs(env_state, env_params)
-            next_obs = next_obs[0].ravel()
-            return env_state, next_obs
+        def _reset_envs(rng):
+            reset_env_keys = jax.random.split(rng, args.num_envs)
+            env_states = jax.vmap(env.reset, in_axes=(0, None))(reset_env_keys, env_params)
+            next_obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
+            next_obs = next_obs[:, 0, :, :].reshape(args.num_envs, -1)
+            return env_states, next_obs
 
-        rng, key = jax.random.split(rng)
-        env_state, next_obs = jax.lax.cond(
+        env_states, next_obs = jax.lax.cond(
                 step % args.reset_env_every == 0,
-                _reset_env,
-                lambda _: (env_state, next_obs),
-                key
+                _reset_envs,
+                lambda _: (env_states, next_obs),
+                rng
                 )
 
-        return (rng, env_state, next_obs, ag_state, bstate, step + 1), (rewards, ag_state.epsilon)
+        return (rng, env_states, next_obs, ag_state, bstate, step + 1), (rewards, ag_state.epsilon)
 
     env_params = DroneEnvParams(
             n_drones=args.n_drones,
@@ -120,24 +121,29 @@ def train_jax(args: argparse.Namespace):
             tau=args.tau,
             )
 
-    rng = jax.random.PRNGKey(args.seed)
-    env = DeliveryDrones()
-    env_state = env.reset(rng, env_params)
-    dqn_agent = DQNAgent()
-    ag_state = dqn_agent.reset(rng, ag_params, env_params)
-
     # init buffer
     buffer = ReplayBuffer(buffer_size=args.memory_size, sample_batch_size=args.batch_size)
-    obs = env.get_obs(env_state, env_params)
-    obs = obs[0].ravel()
-    actions = jax.random.randint(rng, (env_params.n_drones,), minval=0, maxval=Action.num_actions())
-    env_state, rewards, dones = env.step(rng, env_state, actions, env_params)
-    next_obs = env.get_obs(env_state, env_params)
-    next_obs = next_obs[0].ravel()
-    exp = {'obs': obs, 'actions': actions[0], 'rewards': rewards[0], 'next_obs': next_obs, 'dones': dones[0]}
+    obs_size = 6 * (2 * args.window_radius + 1) **2
+    exp = {
+        'obs': jnp.zeros(obs_size,),
+        'actions': jnp.array(0, dtype=jnp.int32),
+        'rewards': jnp.array(0.0, dtype=jnp.float32),
+        'next_obs': jnp.zeros(obs_size,),
+        'dones': jnp.array(True, dtype=jnp.bool),
+        }
     bstate = buffer.init(exp)
 
-    carry = (rng, env_state, next_obs, ag_state, bstate, jnp.array(0))  # intial carry
+    # init states
+    rng = jax.random.PRNGKey(args.seed)
+    env = DeliveryDrones()
+    reset_env_keys = jax.random.split(rng, args.num_envs)
+    env_states = jax.vmap(env.reset, in_axes=(0, None))(reset_env_keys, env_params)
+    dqn_agent = DQNAgent()
+    ag_state = dqn_agent.reset(rng, ag_params, env_params)
+    obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
+    obs = obs[:, 0, :, :].reshape(args.num_envs, -1)
+
+    carry = (rng, env_states, obs, ag_state, bstate, jnp.array(0))  # intial carry
     max_scan_steps = 100_000
     scan_steps = min(args.num_steps, max_scan_steps)
     num_iterations = math.ceil(args.num_steps / scan_steps)
@@ -146,7 +152,7 @@ def train_jax(args: argparse.Namespace):
         carry, (rewards, epsilons) = jax.lax.scan(_train, carry, length=scan_steps)
     rewards.block_until_ready()  # for accurate timing
     time_taken = timer() - ts
-    logger.info(f'Trained {args.num_steps:,} steps in {time_taken:.2f}s ({args.num_steps/time_taken:.1f} steps/s)')
+    logger.info(f'Trained {args.num_steps:,} steps with {args.num_envs:,} envs in {time_taken:.2f}s ({(args.num_envs * args.num_steps)/time_taken:,.0f} obs/s)')
 
     if args.render_video:
         print(f'Rendering video {args.video_output_file}...')
@@ -166,7 +172,7 @@ def parse_args():
     parser.add_argument("--dropzones_factor", type=int, default=0, help="Number of dropzones relative to n_drones")
     parser.add_argument("--stations_factor", type=int, default=1, help="Number of charging stations relative to n_drones")
     parser.add_argument("--skyscrapers_factor", type=int, default=0, help="Number of skyscrapers relative to n_drones")
-    # parser.add_argument("--num_envs", type=int, default=1, help="Number of envs to run. Increasing the number of envs will generate more experiences per training step.")
+    parser.add_argument("--num_envs", type=int, default=1, help="Number of envs to run. Increasing the number of envs will generate more experiences per training step.")
     # training
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate")
@@ -198,4 +204,10 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
+    # some validations
+    if args.num_envs <= 0:
+        raise ValueError(f'Number of envs need to be at least 1')
+    if args.num_steps <= 0:
+        raise ValueError(f'Number of steps need to be at least 1')
+    # train!
     train_jax(args)
