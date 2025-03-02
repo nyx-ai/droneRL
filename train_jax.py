@@ -1,4 +1,6 @@
 import logging
+from datetime import datetime
+import os
 import pprint
 import statistics
 import argparse
@@ -132,6 +134,12 @@ def train_jax(args: argparse.Namespace):
     logger.info(f'Agent params:')
     pprint.pprint(ag_params)
 
+    # training dir
+    now_str =  datetime.now().strftime('%Y%m%d_%H%M%S')
+    run_dir = os.path.join('output', f'run_{now_str}')
+    os.makedirs(run_dir, exist_ok=True)
+    logger.info(f'Training output will be saved in {run_dir}...')
+
     # init buffer
     buffer = ReplayBuffer(buffer_size=args.memory_size, sample_batch_size=args.batch_size)
     obs_size = 6 * (2 * args.window_radius + 1) **2
@@ -172,14 +180,23 @@ def train_jax(args: argparse.Namespace):
     time_taken = timer() - ts
     logger.info(f'Trained {args.num_steps:,} steps with {args.num_envs:,} envs in {time_taken:.2f}s ({(args.num_envs * args.num_steps)/time_taken:,.0f} obs/s)')
 
+    if args.save_final_checkpoint:
+        jax_name = os.path.join(run_dir, f'agent_{args.num_steps}_steps_jax.safetensors')
+        logger.info(f'Saving JAX checkpoint to {jax_name}...')
+        dqn_agent.save(jax_name, ag_state, ag_params, env_params)
+        torch_name = os.path.join(run_dir, f'agent_{args.num_steps}_steps_torch.safetensors')
+        logger.info(f'Saving torch checkpoint to {torch_name}...')
+        dqn_agent.save_as_torch(torch_name, ag_state, ag_params, env_params)
+
     # evals
     logger.info(f'Running final eval...')
     agent_eval, random_eval  = eval_jax(args, ag_state)
     logger.info(f'Final mean eval reward: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
 
     if args.render_video:
-        print(f'Rendering video {args.video_output_file}...')
-        render_video(env_params, ag_state, output_path=args.video_output_file, num_steps=args.render_video_steps)
+        f_out = os.path.join(run_dir, f'training_{args.num_steps}_steps.mp4')
+        print(f'Rendering video {f_out}...')
+        render_video(env_params, ag_state, output_path=f_out, num_steps=args.render_video_steps)
 
 def eval_jax(args: argparse.Namespace, ag_state):
     def _eval(carry, step):
@@ -234,9 +251,6 @@ def eval_jax(args: argparse.Namespace, ag_state):
 
 def parse_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    # experiment
-    parser.add_argument("--num_steps", type=int, default=1000, help="Number of steps to train")
-    parser.add_argument("--seed", type=int, default=0, help="Seed")
     # env
     parser.add_argument("--n_drones", type=int, default=4, help="Number of drones")
     parser.add_argument("--grid_size", type=int, default=9, help="Size of the grid")
@@ -246,7 +260,9 @@ def parse_args():
     parser.add_argument("--stations_factor", type=int, default=2, help="Number of charging stations relative to n_drones")
     parser.add_argument("--skyscrapers_factor", type=int, default=3, help="Number of skyscrapers relative to n_drones")
     parser.add_argument("--num_envs", type=int, default=1, help="Number of envs to run. Increasing the number of envs will generate more experiences per training step.")
+    parser.add_argument("--seed", type=int, default=0, help="Seed")
     # training
+    parser.add_argument("--num_steps", type=int, default=1000, help="Number of steps to train")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--learning_rate", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--memory_size", type=int, default=100_000, help="Size of replay memory")
@@ -259,8 +275,9 @@ def parse_args():
     parser.add_argument("--gamma", type=float, default=0.9, help="Discount factor")
     parser.add_argument("--reset_env_every", type=int, default=100, help="Reset env every n training steps")
     parser.add_argument("--tau", type=float, default=1.0, help="Soft update parameter. A value of 1.0 corresponds to hard updates.")
+    parser.add_argument("--save_final_checkpoint", action='store_true', default=False, help="Whether to save a final checkpoint")
     # model
-    parser.add_argument("--hidden_layers", nargs='+', type=int, default=[16, 16], help="Hidden layer sizes")
+    parser.add_argument("--hidden_layers", nargs='+', type=int, default=(16, 16), help="Hidden layer sizes")
     # rewards
     parser.add_argument("--pickup_reward", type=float, default=0.0, help="Reward for pickup")
     parser.add_argument("--delivery_reward", type=float, default=1.0, help="Reward for delivery")
@@ -276,7 +293,6 @@ def parse_args():
     # video
     parser.add_argument("--render_video", action='store_true', default=False, help="Whether to render a video at the end")
     parser.add_argument("--render_video_steps", type=int, default=200, help="Number of steps to render video for")
-    parser.add_argument("--video_output_file", type=str, default='./jax_training_out.mp4', help="Number of steps to render video for")
 
     args = parser.parse_args()
     return args
