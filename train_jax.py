@@ -160,17 +160,22 @@ def train_jax(args: argparse.Namespace):
     scan_steps = min(args.num_steps, max_scan_steps)
     num_iterations = math.ceil(args.num_steps / scan_steps)
     ts = timer()
-    for _ in trange(num_iterations):
+    for it in trange(num_iterations):
         carry, (rewards, epsilons) = jax.lax.scan(_train, carry, length=scan_steps)
+        if args.eval_while_training and it < num_iterations - 1:
+            logger.info(f'Running eval...')
+            agent_eval, random_eval  = eval_jax(args, carry[-3])
+            logger.info(f'Mean eval reward: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
+
     ag_state = carry[-3]
     rewards.block_until_ready()  # for accurate timing
     time_taken = timer() - ts
     logger.info(f'Trained {args.num_steps:,} steps with {args.num_envs:,} envs in {time_taken:.2f}s ({(args.num_envs * args.num_steps)/time_taken:,.0f} obs/s)')
 
     # evals
-    logger.info(f'Running eval...')
+    logger.info(f'Running final eval...')
     agent_eval, random_eval  = eval_jax(args, ag_state)
-    logger.info(f'Mean eval reward: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
+    logger.info(f'Final mean eval reward: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
 
     if args.render_video:
         print(f'Rendering video {args.video_output_file}...')
@@ -236,10 +241,10 @@ def parse_args():
     parser.add_argument("--n_drones", type=int, default=4, help="Number of drones")
     parser.add_argument("--grid_size", type=int, default=9, help="Size of the grid")
     parser.add_argument("--window_radius", type=int, default=3, help="Radius of observation window")
-    parser.add_argument("--packets_factor", type=int, default=0, help="Number of packages relative to n_drones")
-    parser.add_argument("--dropzones_factor", type=int, default=0, help="Number of dropzones relative to n_drones")
-    parser.add_argument("--stations_factor", type=int, default=1, help="Number of charging stations relative to n_drones")
-    parser.add_argument("--skyscrapers_factor", type=int, default=0, help="Number of skyscrapers relative to n_drones")
+    parser.add_argument("--packets_factor", type=int, default=3, help="Number of packages relative to n_drones")
+    parser.add_argument("--dropzones_factor", type=int, default=2, help="Number of dropzones relative to n_drones")
+    parser.add_argument("--stations_factor", type=int, default=2, help="Number of charging stations relative to n_drones")
+    parser.add_argument("--skyscrapers_factor", type=int, default=3, help="Number of skyscrapers relative to n_drones")
     parser.add_argument("--num_envs", type=int, default=1, help="Number of envs to run. Increasing the number of envs will generate more experiences per training step.")
     # training
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
@@ -267,6 +272,7 @@ def parse_args():
     parser.add_argument("--eval_seed", type=int, default=0, help="Eval seed")
     parser.add_argument("--num_eval_steps", type=int, default=10_000, help="Num eval steps")
     parser.add_argument("--num_evals", type=int, default=5, help="Number of evaluations")
+    parser.add_argument("--eval_while_training", action='store_true', default=False, help="Whether to run eval while training")
     # video
     parser.add_argument("--render_video", action='store_true', default=False, help="Whether to render a video at the end")
     parser.add_argument("--render_video_steps", type=int, default=200, help="Number of steps to render video for")
