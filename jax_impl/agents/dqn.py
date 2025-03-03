@@ -331,7 +331,7 @@ class DQNAgent():
                     raise Exception(f'Unexpected key {key}')
                 key[-1] = 'weight'
             new_key = '.'.join(key)
-            print(f'Saving {original_key} => {new_key} (shape: {v.shape}, original shape: {original_shape})')
+            # print(f'Saving {original_key} => {new_key} (shape: {v.shape}, original shape: {original_shape})')
             new_params[new_key] = v
         params = new_params
         save_file(params, save_path, metadata=metadata)

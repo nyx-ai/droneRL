@@ -14,6 +14,7 @@ import jax.random
 from tqdm import trange
 from jax.experimental.compilation_cache import compilation_cache as cc
 from timeit import default_timer as timer
+import wandb
 
 from jax_impl.env.env import DroneEnvParams, DeliveryDrones
 from common.constants import Action
@@ -139,6 +140,15 @@ def train_jax(args: argparse.Namespace):
     logger.info(f'Agent params:')
     pprint.pprint(ag_params)
 
+    # W&B
+    if args.wandb:
+        wandb.login()
+        wandb.init(
+                project=args.wandb_project,
+                group=args.wandb_group,
+                entity=args.wandb_entity,
+                config=vars(args))
+
     # training dir
     now_str =  datetime.now().strftime('%Y%m%d_%H%M%S')
     run_dir = os.path.join('output', f'run_{now_str}')
@@ -147,7 +157,6 @@ def train_jax(args: argparse.Namespace):
 
     # init buffer
     buffer = ReplayBuffer(buffer_size=args.memory_size, sample_batch_size=args.batch_size)
-    obs_size = 6 * (2 * args.window_radius + 1) **2
     obs_size = (1, 2 * args.window_radius + 1, 2 * args.window_radius + 1, 6)
     exp = {
         'obs': jnp.zeros(obs_size, dtype=jnp.float32),
@@ -177,9 +186,12 @@ def train_jax(args: argparse.Namespace):
     for it in trange(num_iterations):
         carry, (rewards, epsilons) = jax.lax.scan(_train, carry, length=scan_steps)
         if args.eval_while_training and it < num_iterations - 1:
+            step = (it + 1) * scan_steps
             logger.info(f'Running eval...')
             agent_eval, random_eval  = eval_jax(args, carry[-3])
-            logger.info(f'Mean eval reward: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
+            logger.info(f'Mean eval reward step {step:,}: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
+            if args.wandb:
+                wandb.log({'eval_reward': agent_eval[0], 'random_reward': random_eval[0]}, step=step)
 
     ag_state = carry[-3]
     rewards.block_until_ready()  # for accurate timing
@@ -198,11 +210,16 @@ def train_jax(args: argparse.Namespace):
     logger.info(f'Running final eval...')
     agent_eval, random_eval  = eval_jax(args, ag_state)
     logger.info(f'Final mean eval reward: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
+    if args.wandb:
+        wandb.log({'eval_reward': agent_eval[0], 'random_reward': random_eval[0]}, step=args.num_steps)
 
     if args.render_video:
         f_out = os.path.join(run_dir, f'training_{args.num_steps}_steps.mp4')
-        print(f'Rendering video {f_out}...')
+        logger.info(f'Rendering video {f_out}...')
         render_video(env_params, ag_state, output_path=f_out, num_steps=args.render_video_steps)
+        if args.wandb:
+            logger.info(f'Logging video to W&B...')
+            wandb.log({"eval_video": wandb.Video(f_out, format="mp4")}, step=args.num_steps)
 
 def eval_jax(args: argparse.Namespace, ag_state):
     def _eval(carry, step):
@@ -297,9 +314,9 @@ def parse_args():
     parser.add_argument("--save_final_checkpoint", action='store_true', default=False, help="Whether to save a final checkpoint")
     # model
     parser.add_argument("--network_type", choices=['dense', 'conv'], default='dense', help="DQN network type")
-    parser.add_argument("--hidden_layers", nargs='+', type=int, default=(16, 16), help="Hidden layer sizes")
-    parser.add_argument("--conv_dense_layers", nargs='+', type=int, default=(), help="Hidden layer sizes")
-    parser.add_argument('--conv_layers', type=_parse_conv_layers, default=('[{"kernel_size": 3, "out_channels": 8, "padding": 1, "stride": 1}]'), help='Conv network config (expects stringified JSON)')
+    parser.add_argument("--hidden_layers", nargs='+', type=int, default=(16, 16), help="Dense network hidden layer sizes")
+    parser.add_argument('--conv_layers', type=_parse_conv_layers, default=('[{"kernel_size": 3, "out_channels": 8, "padding": 1, "stride": 1}]'), help='ConvNet network config (expects stringified JSON)')
+    parser.add_argument("--conv_dense_layers", nargs='+', type=int, default=(), help="ConvNet additional hidden layer sizes")
     # rewards
     parser.add_argument("--pickup_reward", type=float, default=0.0, help="Reward for pickup")
     parser.add_argument("--delivery_reward", type=float, default=1.0, help="Reward for delivery")
@@ -315,10 +332,13 @@ def parse_args():
     # video
     parser.add_argument("--render_video", action='store_true', default=False, help="Whether to render a video at the end")
     parser.add_argument("--render_video_steps", type=int, default=200, help="Number of steps to render video for")
-
+    # W&B
+    parser.add_argument("--wandb", action='store_true', default=False, help="Whether to log to W&B")
+    parser.add_argument("--wandb_project", type=str, default="dronerl", help="W&B project name")
+    parser.add_argument("--wandb_entity", type=str, default='nyxai', help="W&B entity")
+    parser.add_argument("--wandb_group", type=str, default=None, help="W&B group for organizing related runs")
     args = parser.parse_args()
     return args
-
 
 
 if __name__ == "__main__":
@@ -328,5 +348,6 @@ if __name__ == "__main__":
         raise ValueError(f'Number of envs need to be at least 1')
     if args.num_steps <= 0:
         raise ValueError(f'Number of steps need to be at least 1')
+
     # train!
     train_jax(args)
