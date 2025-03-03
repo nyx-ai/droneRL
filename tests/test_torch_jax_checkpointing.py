@@ -24,8 +24,8 @@ def jax_obs():
     env = DeliveryDrones()
     rng = jax.random.PRNGKey(0)
     env_state = env.reset(rng, params)
-    obs = env.get_obs(env_state, params)[0]
-    return obs.ravel()
+    obs = env.get_obs(env_state, params)[:1]
+    return obs
 
 
 def test_dqn_agent_save(jax_dqn_agent, jax_obs):

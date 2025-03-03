@@ -62,7 +62,7 @@ def render_video(
         rng, key = jax.random.split(rng)
         actions = jax.random.randint(key, (env_params.n_drones,), 0, 5, dtype=jnp.int32)
         obs = get_obs_jit(env_state, env_params)
-        obs = obs[0].ravel()
+        obs = obs[:1]
         dqn_action = act_jit(key, obs, ag_state, greedy=True)
         actions = actions.at[0].set(dqn_action)
         env_state, rewards, dones = step_jit(rng, env_state, actions, env_params)

@@ -77,7 +77,7 @@ def test_can_sample(buffer, filled_buffer_state, buffer_state):
     assert not buffer.can_sample(buffer_state)
 
 
-@pytest.mark.focus
+# @pytest.mark.focus
 def test_add_many_experiences(buffer, buffer_state, experience_example):
     """Tests adding multiple experiences at once to the buffer."""
     # Create a batch of experiences

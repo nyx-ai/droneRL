@@ -1,4 +1,5 @@
 import jax
+import pytest
 import os
 import tempfile
 
@@ -7,6 +8,7 @@ from jax_impl.agents.dqn import DQNAgent, DQNAgentParams
 from jax_impl.render_util import render_video
 
 
+@pytest.mark.focus
 def test_render_video():
     env_params = DroneEnvParams(n_drones=3, grid_size=10, window_radius=2)
     dqn_agent = DQNAgent()
