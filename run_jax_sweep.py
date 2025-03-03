@@ -27,6 +27,7 @@ def main():
         args.hidden_layers = (256, 128, 64)
     args.target_update_interval = 100
     args.memory_size = 20_000
+    args.render_video = True
     args.wandb = True
     args.eval_while_training = True
     score = train_jax(args)
