@@ -1,4 +1,6 @@
 import logging
+import ast
+import json
 from datetime import datetime
 import os
 import pprint
@@ -45,7 +47,7 @@ def train_jax(args: argparse.Namespace):
         env_step_keys = jax.random.split(key, args.num_envs)
         env_states, rewards, dones = jax.vmap(env.step, in_axes=(0, 0, 0, None))(env_step_keys, env_states, actions, env_params)
         next_obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
-        next_obs = next_obs[:, 0, :, :].reshape(args.num_envs, -1)  # only consider obs from agent 0
+        next_obs = next_obs[:, :1, :, :]  # only consider obs from agent 0
 
         # add to buffer
         exps = {'obs': obs, 'actions': actions[:, 0], 'rewards': rewards[:, 0], 'next_obs': next_obs, 'dones': dones[:, 0]}
@@ -88,7 +90,7 @@ def train_jax(args: argparse.Namespace):
             reset_env_keys = jax.random.split(rng, args.num_envs)
             env_states = jax.vmap(env.reset, in_axes=(0, None))(reset_env_keys, env_params)
             next_obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
-            next_obs = next_obs[:, 0, :, :].reshape(args.num_envs, -1)
+            next_obs = next_obs[:, :1, :, :]
             return env_states, next_obs
 
         env_states, next_obs = jax.lax.cond(
@@ -121,7 +123,10 @@ def train_jax(args: argparse.Namespace):
     else:
         eps_decay = args.epsilon_decay
     ag_params = DQNAgentParams(
+            network_type=args.network_type,
             hidden_layers=args.hidden_layers,
+            conv_layers=args.conv_layers,
+            conv_dense_layers=args.conv_dense_layers,
             target_update_interval=args.target_update_interval,
             epsilon_start=args.epsilon_start,
             epsilon_decay=eps_decay,
@@ -143,8 +148,9 @@ def train_jax(args: argparse.Namespace):
     # init buffer
     buffer = ReplayBuffer(buffer_size=args.memory_size, sample_batch_size=args.batch_size)
     obs_size = 6 * (2 * args.window_radius + 1) **2
+    obs_size = (1, 2 * args.window_radius + 1, 2 * args.window_radius + 1, 6)
     exp = {
-        'obs': jnp.zeros(obs_size,),
+        'obs': jnp.zeros(obs_size, dtype=jnp.float32),
         'actions': jnp.array(0, dtype=jnp.int32),
         'rewards': jnp.array(0.0, dtype=jnp.float32),
         'next_obs': jnp.zeros(obs_size,),
@@ -160,7 +166,7 @@ def train_jax(args: argparse.Namespace):
     dqn_agent = DQNAgent()
     ag_state = dqn_agent.reset(rng, ag_params, env_params)
     obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
-    obs = obs[:, 0, :, :].reshape(args.num_envs, -1)
+    obs = obs[:, :1, :, :]
 
     # train
     carry = (rng, env_states, obs, ag_state, bstate, jnp.array(0))  # intial carry
@@ -204,7 +210,7 @@ def eval_jax(args: argparse.Namespace, ag_state):
 
         # get obs
         obs = env.get_obs(state, env_params)
-        obs = obs[0].ravel()
+        obs = obs[:1]
 
         # generate random actions for all drones
         rng, key = jax.random.split(rng)
@@ -250,6 +256,19 @@ def eval_jax(args: argparse.Namespace, ag_state):
 
 
 def parse_args():
+    def _parse_conv_layers(value: str):
+        try:
+            layers = json.loads(value)
+        except json.JSONDecodeError:
+            try:
+                layers = ast.literal_eval(value)
+                if isinstance(layers, dict):
+                    return (layers,)
+                return tuple(layers)
+            except (SyntaxError, ValueError):
+                raise argparse.ArgumentTypeError(f"Invalid format for conv_layers: {value}.")
+        return tuple(layers)
+
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # env
     parser.add_argument("--n_drones", type=int, default=4, help="Number of drones")
@@ -277,7 +296,10 @@ def parse_args():
     parser.add_argument("--tau", type=float, default=1.0, help="Soft update parameter. A value of 1.0 corresponds to hard updates.")
     parser.add_argument("--save_final_checkpoint", action='store_true', default=False, help="Whether to save a final checkpoint")
     # model
+    parser.add_argument("--network_type", choices=['dense', 'conv'], default='dense', help="DQN network type")
     parser.add_argument("--hidden_layers", nargs='+', type=int, default=(16, 16), help="Hidden layer sizes")
+    parser.add_argument("--conv_dense_layers", nargs='+', type=int, default=(), help="Hidden layer sizes")
+    parser.add_argument('--conv_layers', type=_parse_conv_layers, default=('[{"kernel_size": 3, "out_channels": 8, "padding": 1, "stride": 1}]'), help='Conv network config (expects stringified JSON)')
     # rewards
     parser.add_argument("--pickup_reward", type=float, default=0.0, help="Reward for pickup")
     parser.add_argument("--delivery_reward", type=float, default=1.0, help="Reward for delivery")
