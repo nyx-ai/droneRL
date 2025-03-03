@@ -221,6 +221,8 @@ def train_jax(args: argparse.Namespace):
             logger.info(f'Logging video to W&B...')
             wandb.log({"eval_video": wandb.Video(f_out, format="mp4")}, step=args.num_steps)
 
+    return agent_eval[0]
+
 def eval_jax(args: argparse.Namespace, ag_state):
     def _eval(carry, step):
         rng, state, ag_state = carry
