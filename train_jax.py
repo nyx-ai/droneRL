@@ -139,6 +139,9 @@ def train_jax(args: argparse.Namespace):
             )
     logger.info(f'Agent params:')
     pprint.pprint(ag_params)
+    logger.info(f'Training on device {jax.devices()[0]}')
+    logger.info(f'Full config:')
+    pprint.pprint(args)
 
     # W&B
     if args.wandb:

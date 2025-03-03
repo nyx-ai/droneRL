@@ -7,3 +7,4 @@ wandb
 *.npy
 *.png
 output
+jax_cache
