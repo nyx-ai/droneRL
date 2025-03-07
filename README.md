@@ -4,8 +4,9 @@ DroneRL is a reinforcement learning 2D grid world environment in which agents ca
 
 This environment is implemented in both PyTorch and JAX.
 
-![output](https://github.com/user-attachments/assets/f87800a4-3414-4949-bd05-e567a51da9b2)
-_Player 0 is an agent trained for 5M steps, other players act randomly_
+![output](https://github.com/user-attachments/assets/babedf9d-d062-48f9-9e5e-37d939581a4c)
+
+*Player 0 is an agent trained for 5M steps, other players act randomly*
 
 🥇 There is a public leaderboard on AICrowd for this problem, check it out on [AIcrowd](https://www.aicrowd.com/challenges/dronerl/leaderboards).
 
