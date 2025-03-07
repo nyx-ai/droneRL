@@ -235,12 +235,14 @@ class ConvQNetworkFactory(BaseDQNFactory):
             action_shape: Sequence[int],
             conv_layers: Sequence[Dict[str, int]] = (),
             dense_layers: Sequence[int] = (),
+            learning_rate: float = 1e-3,
             state_dict: Optional[Dict] = None):
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.conv_layers = conv_layers
         self.dense_layers = dense_layers
         self.state_dict = state_dict
+        self.learning_rate = learning_rate
 
         # Validate conv layers have required parameters
         for layer in self.conv_layers:
@@ -251,7 +253,7 @@ class ConvQNetworkFactory(BaseDQNFactory):
 
     def create_qnetwork(self):
         network = ConvQNetwork(self.obs_shape, self.action_shape, self.conv_layers, self.dense_layers)
-        optimizer = optim.Adam(network.parameters())
+        optimizer = optim.Adam(network.parameters(), lr=self.learning_rate)
         if self.state_dict is not None:
             network.load_state_dict(self.state_dict)
         return network, optimizer
