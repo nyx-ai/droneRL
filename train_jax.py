@@ -154,7 +154,7 @@ def train_jax(args: argparse.Namespace):
 
     # training dir
     now_str =  datetime.now().strftime('%Y%m%d_%H%M%S')
-    run_dir = os.path.join('output', f'run_{now_str}')
+    run_dir = os.path.join('output', f'jax_run_{now_str}')
     os.makedirs(run_dir, exist_ok=True)
     logger.info(f'Training output will be saved in {run_dir}...')
 
