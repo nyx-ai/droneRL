@@ -171,7 +171,6 @@ class DeliveryDrones:
         is_discharging = ~is_charging & (~collided)
         charge = (state.charge + is_charging * params.charge).clip(0, 100)
         charge = (charge - is_discharging * params.discharge).clip(0, 100)
-        charge = charge.clip(0, 100)
         out_of_charge = charge == 0
 
         # compute who survived

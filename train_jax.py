@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 cc.set_cache_dir('./jax_cache')
 
-
 def train_jax(args: argparse.Namespace):
     @jax.jit
     def _train(carry, _):
@@ -48,10 +47,10 @@ def train_jax(args: argparse.Namespace):
         env_step_keys = jax.random.split(key, args.num_envs)
         env_states, rewards, dones = jax.vmap(env.step, in_axes=(0, 0, 0, None))(env_step_keys, env_states, actions, env_params)
         next_obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
-        next_obs = next_obs[:, :1, :, :]  # only consider obs from agent 0
+        next_obs = next_obs[:, :1].reshape(args.num_envs, 1, -1)
 
         # add to buffer
-        exps = {'obs': obs, 'actions': actions[:, 0], 'rewards': rewards[:, 0], 'next_obs': next_obs, 'dones': dones[:, 0]}
+        exps = {'obs': obs[:, 0, :], 'actions': actions[:, 0], 'rewards': rewards[:, 0], 'next_obs': next_obs[:, 0, :], 'dones': dones[:, 0]}
         bstate = buffer.add_many(bstate, exps)
 
         # train step
@@ -91,7 +90,7 @@ def train_jax(args: argparse.Namespace):
             reset_env_keys = jax.random.split(rng, args.num_envs)
             env_states = jax.vmap(env.reset, in_axes=(0, None))(reset_env_keys, env_params)
             next_obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
-            next_obs = next_obs[:, :1, :, :]
+            next_obs = next_obs[:, 0].reshape(args.num_envs, 1, -1)
             return env_states, next_obs
 
         env_states, next_obs = jax.lax.cond(
@@ -160,7 +159,9 @@ def train_jax(args: argparse.Namespace):
 
     # init buffer
     buffer = ReplayBuffer(buffer_size=args.memory_size, sample_batch_size=args.batch_size)
-    obs_size = (1, 2 * args.window_radius + 1, 2 * args.window_radius + 1, 6)
+    # obs_size = (1, 2 * args.window_radius + 1, 2 * args.window_radius + 1, 6)
+    obs_size = ((2 * args.window_radius + 1) ** 2 * 6,)
+
     exp = {
         'obs': jnp.zeros(obs_size, dtype=jnp.float32),
         'actions': jnp.array(0, dtype=jnp.int32),
@@ -178,7 +179,7 @@ def train_jax(args: argparse.Namespace):
     dqn_agent = DQNAgent()
     ag_state = dqn_agent.reset(rng, ag_params, env_params)
     obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
-    obs = obs[:, :1, :, :]
+    obs = obs[:, 0].reshape(args.num_envs, 1, -1)
 
     # train
     carry = (rng, env_states, obs, ag_state, bstate, jnp.array(0))  # intial carry
@@ -232,7 +233,7 @@ def eval_jax(args: argparse.Namespace, ag_state):
 
         # get obs
         obs = env.get_obs(state, env_params)
-        obs = obs[:1]
+        obs = obs[0].reshape(1, -1)
 
         # generate random actions for all drones
         rng, key = jax.random.split(rng)
@@ -263,6 +264,8 @@ def eval_jax(args: argparse.Namespace, ag_state):
     dqn_agent = DQNAgent()
     mean_rewards = []
     random_mean_rewards = []
+
+
     for i in trange(args.num_evals):
         rng = jax.random.PRNGKey(args.eval_seed + i)
         env_state = env.reset(rng, env_params)

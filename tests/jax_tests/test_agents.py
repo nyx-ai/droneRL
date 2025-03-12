@@ -25,8 +25,7 @@ def obs():
     env = DeliveryDrones()
     rng = jax.random.PRNGKey(0)
     env_state = env.reset(rng, params)
-    obs = env.get_obs(env_state, params)[0]
-    obs = jnp.expand_dims(obs, axis=0)
+    obs = env.get_obs(env_state, params)[0].reshape(1, -1)
     return obs
 
 

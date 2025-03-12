@@ -262,8 +262,8 @@ def test_get_obs_v2(drone_env_get_obs):
     assert obs[1, radius, radius, 1] == 0  # not carrying package
     assert obs[1, 2, 6, 1] == 1
     assert obs[1, 6, 6, 1] == 1
-    assert obs[0, radius, radius, 4] == .8  # charge
-    assert obs[1, radius, radius, 4] == .6
+    assert jnp.allclose(obs[0, radius, radius, 4], jnp.array(.8))  # charge
+    assert jnp.allclose(obs[1, radius, radius, 4], jnp.array(.6))
     assert obs[0, 0, 2, 5] == 1  # skyscraper
     assert jnp.all(obs[0, :, :2, 5] == 1)  # walls
 
@@ -299,8 +299,8 @@ def test_get_obs_comprehensive(drone_env_get_obs):
     # Test charge levels (channel 4)
     assert 0 <= obs[0, radius, radius, 4] <= 1  # Normalized charge
     assert 0 <= obs[1, radius, radius, 4] <= 1
-    assert obs[0, radius, radius, 4] == 0.8  # First drone charge
-    assert obs[1, radius, radius, 4] == 0.6  # Second drone charge
+    assert jnp.allclose(obs[0, radius, radius, 4], jnp.array(0.8))  # First drone charge
+    assert jnp.allclose(obs[1, radius, radius, 4], jnp.array(0.6))  # Second drone charge
 
     # Test channel exclusivity (each cell should have at most one object type)
     # Excluding charge channel and drone positions

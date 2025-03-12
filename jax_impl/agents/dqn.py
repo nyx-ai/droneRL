@@ -49,7 +49,7 @@ class DenseQNetwork(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        x = x.reshape(x.shape[0], -1)
+        # x = x.reshape(x.shape[0], -1)
         for n_features in self.hidden_layers:
             x = nn.Dense(n_features, kernel_init=nn.initializers.he_normal())(x)
             x = nn.relu(x)
@@ -59,17 +59,19 @@ class DenseQNetwork(nn.Module):
     def init_weights(
             self,
             rng: jnp.ndarray,
-            obs_shape: Tuple[int, int, int, int]):
-        return self.init({'params': rng}, jnp.zeros(obs_shape, dtype=jnp.float32))
+            input_shape: Tuple[int, int]):
+        return self.init({'params': rng}, jnp.zeros(input_shape, dtype=jnp.float32))
 
 
 class ConvQNetwork(nn.Module):
+    obs_shape: Tuple[int, ...]
     conv_layers: Tuple[Dict[str, int], ...] = ({"out_channels": 8, "kernel_size": 3, "stride": 1, "padding": 1},)
     dense_layers: Tuple[int, ...] = ()
 
     @nn.compact
     def __call__(self, x):
-        for i, conv_kwds in enumerate(self.conv_layers):
+        x = x.reshape(x.shape[0], *self.obs_shape)
+        for conv_kwds in self.conv_layers:
             x = nn.Conv(
                 features=conv_kwds["out_channels"],
                 kernel_size=(conv_kwds["kernel_size"], conv_kwds["kernel_size"]),
@@ -87,34 +89,35 @@ class ConvQNetwork(nn.Module):
     def init_weights(
             self,
             rng: jnp.ndarray,
-            obs_shape: Tuple[int, int, int, int]):
-        return self.init({'params': rng}, jnp.zeros(obs_shape, dtype=jnp.float32))
+            input_shape: Tuple[int, int]):
+        return self.init({'params': rng}, jnp.zeros(input_shape, dtype=jnp.float32))
 
 
 class DQNAgent():
     def reset(self, rng: jnp.ndarray, ag_params: DQNAgentParams, env_params: DroneEnvParams) -> DQNAgentState:
         if env_params.wrapper != 'window':
             raise NotImplementedError
-        r = env_params.window_radius
-        input_size = (r * 2 + 1) ** 2 * 6
         # create network
+        r = env_params.window_radius
+        obs_shape = (r * 2 + 1, r * 2 + 1, 6)
         if ag_params.network_type == 'dense':
             qnetwork = DenseQNetwork(ag_params.hidden_layers)
         elif ag_params.network_type == 'conv':
             qnetwork = ConvQNetwork(
+                    obs_shape=obs_shape,
                     conv_layers=ag_params.conv_layers,
                     dense_layers=ag_params.conv_dense_layers)
         else:
             raise ValueError(f'Unsupported network type {ag_params.network_type}')
-        obs_shape = (1, r * 2 + 1, r * 2 + 1, 6)
-        qnetwork_params = qnetwork.init_weights(rng, obs_shape)
+        input_shape = (1, (env_params.window_radius * 2 + 1) ** 2 * 6)
+        qnetwork_params = qnetwork.init_weights(rng, input_shape)
         # create optimizer
         optimizer = optax.adam(ag_params.learning_rate)
         opt_state = optimizer.init(qnetwork_params)
         # create target network (static)
         rng, key = jax.random.split(rng)
         target_qnetwork = copy.deepcopy(qnetwork)
-        target_qnetwork_params = target_qnetwork.init_weights(rng, obs_shape)
+        target_qnetwork_params = target_qnetwork.init_weights(key, input_shape)
         return DQNAgentState(
                 qnetwork=qnetwork,
                 qnetwork_params=qnetwork_params,
@@ -207,7 +210,9 @@ class DQNAgent():
         elif metadata['network_type'] == 'conv':
             conv_layers = ast.literal_eval(metadata['conv_layers'])
             conv_dense_layers = ast.literal_eval(metadata['conv_dense_layers'])
+            obs_shape = ast.literal_eval(metadata['obs_shape'])
             qnetwork = ConvQNetwork(
+                    obs_shape=obs_shape,
                     conv_layers=conv_layers,
                     dense_layers=conv_dense_layers)
         else:
@@ -254,7 +259,9 @@ class DQNAgent():
         elif metadata['network_type'] == 'conv':
             conv_layers = ast.literal_eval(metadata['conv_layers'])
             conv_dense_layers = ast.literal_eval(metadata['conv_dense_layers'])
+            obs_shape = ast.literal_eval(metadata['obs_shape'])
             qnetwork = ConvQNetwork(
+                    obs_shape=obs_shape,
                     conv_layers=conv_layers,
                     dense_layers=conv_dense_layers)
         else:
