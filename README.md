@@ -77,7 +77,7 @@ The benefit of the JAX implementation is that the code runs on both GPUs and TPU
 | TPU v3-8           |                         3,843 |                            3,641 |
 | Mac M2 Pro (CPU)   |                        14,739 |                            5,017 |
 
-As you can see, leveraging accelerators only really makes sense when training larger networks. You might be able to train faster on CPU when training a very small network architecture.
+As you can see, leveraging accelerators only really makes sense when training larger networks. You might even be able to train faster on CPU when training a very small network architecture.
 
 ### Scaling up envs and env sharding for JAX
 If you have multiple devices available (e.g. a TPU v3-8 has 8 devices), you may use training with sharded envs. This increases the number of observations you can generate as you're making use of all available devices.
