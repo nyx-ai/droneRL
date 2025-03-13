@@ -50,8 +50,12 @@ python train_jax.py
 
 Due to warmup and compilation, JAX will be slower when running a small number of steps, but then should take over. Note that the torch implementation has been very slightly adjusted in order to make this comparison fair. The resulting eval reward is within error margins between the two implementations.
 
-### Scaling up number of envs
-🚧
+### Scaling up envs and env sharding for JAX
+If you have multiple devices available (e.g. a TPU v3-8 has 8 devices), you may use training with sharded envs. This increases the number of observations you can generate as you're making use of all available devices.
+
+![num_envs](https://github.com/user-attachments/assets/5c9215ac-3207-464e-bea9-9e15f1b12e55)
+
+Note that as you generate more observations in each training step you may also want to increase the batch size and learning rate in order for efficient learning to happen. In order to use sharding across envs, use the `--num_envs` and `--use_sharding` arguments in the `train_jax.py` script. Note that the number of envs needs to be divisible by the number of devices.
 
 ### JAX on accelerators
 The benefit of the JAX implementation is that the code runs on both GPUs and TPUs end-to-end, meaning both environment and agent are leveraging accelerators. In order for this to work the JAX environment step function is fully vectorized and the whole training loop makes use of loop unrolling via [JAX scans](https://docs.jax.dev/en/latest/_autosummary/jax.lax.scan.html), thereby minimizing host-accelerator communication.
