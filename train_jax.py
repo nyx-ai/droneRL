@@ -15,8 +15,9 @@ from tqdm import trange
 from jax.experimental.compilation_cache import compilation_cache as cc
 from timeit import default_timer as timer
 import wandb
+from jax.sharding import NamedSharding, PartitionSpec
 
-from jax_impl.env.env import DroneEnvParams, DeliveryDrones
+from jax_impl.env.env import DroneEnvParams, DeliveryDrones, DroneEnvState
 from common.constants import Action
 from jax_impl.agents.dqn import DQNAgent, DQNAgentParams
 from jax_impl.buffers import ReplayBuffer
@@ -27,6 +28,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)-5.5s] 
 logger = logging.getLogger(__name__)
 
 cc.set_cache_dir('./jax_cache')
+
+
+NUM_DEVICES = jax.device_count()
+devices = jax.devices()
+
 
 def train_jax(args: argparse.Namespace):
     @jax.jit
@@ -144,7 +150,7 @@ def train_jax(args: argparse.Namespace):
             )
     logger.info(f'Agent params:')
     pprint.pprint(ag_params)
-    logger.info(f'Training on device {jax.devices()[0]}')
+    logger.info(f'Running on {NUM_DEVICES} devices: {devices}')
     logger.info(f'Full config:')
     pprint.pprint(args)
 
@@ -185,6 +191,25 @@ def train_jax(args: argparse.Namespace):
     ag_state = dqn_agent.reset(rng, ag_params, env_params)
     obs = jax.vmap(env.get_obs, in_axes=(0, None))(env_states, env_params)
     obs = obs[:, 0].reshape(args.num_envs, 1, -1)
+
+    # sharding
+    if args.use_sharding:
+        mesh = jax.make_mesh((NUM_DEVICES,), 'envs')
+
+        def mesh_sharding(*spec):
+            # just a helper to convert a tuple to a NamedSharding
+            return NamedSharding(mesh, PartitionSpec(*spec))
+
+        sharding = DroneEnvState(
+                ground=mesh_sharding('envs', None, None),      # (NUM_ENVS, GRID_SIZE, GRID_SIZE)
+                air_x=mesh_sharding('envs', None),             # (NUM_ENVS, N_DRONES)
+                air_y=mesh_sharding('envs', None),             # (NUM_ENVS, N_DRONES)
+                carrying_package=mesh_sharding('envs', None),  # (NUM_ENVS, N_DRONES)
+                charge=mesh_sharding('envs', None)             # (NUM_ENVS, N_DRONES)
+                )
+        env_states = jax.device_put(env_states, sharding)
+        logger.info(f'Using the following sharding for {args.num_envs} envs:')
+        jax.debug.visualize_array_sharding(env_states.air_x)
 
     # train
     carry = (rng, env_states, obs, ag_state, bstate, jnp.array(0))  # intial carry
@@ -328,6 +353,7 @@ def parse_args():
     parser.add_argument("--reset_env_every", type=int, default=100, help="Reset env every n training steps")
     parser.add_argument("--tau", type=float, default=1.0, help="Soft update parameter. A value of 1.0 corresponds to hard updates.")
     parser.add_argument("--save_final_checkpoint", action='store_true', default=False, help="Whether to save a final checkpoint")
+    parser.add_argument("--use_sharding", action='store_true', default=False, help="Whether to shard envs across devices (only usable when running multiple envs). Num envs needs to be divisible by num devices.")
     # model
     parser.add_argument("--network_type", choices=['dense', 'conv'], default='dense', help="DQN network type")
     parser.add_argument("--hidden_layers", nargs='+', type=int, default=(16, 16), help="Dense network hidden layer sizes")
@@ -364,6 +390,10 @@ if __name__ == "__main__":
         raise ValueError(f'Number of envs need to be at least 1')
     if args.num_steps <= 0:
         raise ValueError(f'Number of steps need to be at least 1')
+    if args.use_sharding and args.num_envs <= 1:
+        raise ValueError(f'When using --use_sharding you need to provide num_envs > 1')
+    if args.use_sharding and args.num_envs % NUM_DEVICES != 0:
+        raise ValueError(f'The number of envs (={args.num_envs}) needs to be divisible by the number of devices (={NUM_DEVICES})')
 
     # train!
     train_jax(args)
