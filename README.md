@@ -43,6 +43,20 @@ Everything is identical to PyTorch above, except use the the JAX training script
 python train_jax.py
 ```
 
+## 🏭 Performance
+### Torch vs. JAX
+
+![torch_vs_jax](https://github.com/user-attachments/assets/1158cebe-9c62-4a3e-ae85-68da03c4081b)
+
+Due to warmup and compilation, JAX will be slower when running a small number of steps, but then should take over. Note that the torch implementation has been very slightly adjusted in order to make this comparison fair. The resulting eval reward is within error margins between the two implementations.
+
+### Scaling up number of envs
+🚧
+
+### JAX on accelerators
+The benefit of the JAX implementation is that the code runs on both GPUs and TPUs end-to-end, meaning both environment and agent are leveraging accelerators. In order for this to work the JAX environment step function is fully vectorized and the whole training loop makes use of loop unrolling via [JAX scans](https://docs.jax.dev/en/latest/_autosummary/jax.lax.scan.html), thereby minimizing host-accelerator communication.
+
+🚧
 
 ## Credits
 Part of this work was supported by the [EPFL Extension School](http://exts.epfl.ch/) and [AIcrowd](http://aicrowd.com/).
