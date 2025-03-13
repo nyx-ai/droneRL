@@ -218,14 +218,15 @@ def train_jax(args: argparse.Namespace):
     num_iterations = math.ceil(args.num_steps / scan_steps)
     ts = timer()
     for it in trange(num_iterations):
-        carry, (rewards, epsilons) = jax.lax.scan(_train, carry, length=scan_steps)
         if args.eval_while_training and it < num_iterations - 1:
-            step = (it + 1) * scan_steps
-            logger.info(f'Running eval...')
+            step = it * scan_steps
+            logger.info(f'Running eval at step {step:,}...')
             agent_eval, random_eval  = eval_jax(args, carry[-3])
             logger.info(f'Mean eval reward step {step:,}: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
             if args.wandb:
                 wandb.log({'eval_reward': agent_eval[0], 'random_reward': random_eval[0]}, step=step)
+
+        carry, (rewards, epsilons) = jax.lax.scan(_train, carry, length=scan_steps)
 
     ag_state = carry[-3]
     rewards.block_until_ready()  # for accurate timing
@@ -241,6 +242,11 @@ def train_jax(args: argparse.Namespace):
         torch_name = os.path.join(run_dir, f'agent_{args.num_steps}_steps_torch.safetensors')
         logger.info(f'Saving torch checkpoint to {torch_name}...')
         dqn_agent.save_as_torch(torch_name, ag_state, ag_params, env_params)
+        if args.wandb:
+            artifact = wandb.Artifact(name=f'checkpoint_{args.num_steps}_steps', type='model')
+            artifact.add_file(local_path=jax_name)
+            artifact.add_file(local_path=torch_name)
+            wandb.log_artifact(artifact)
 
     # evals
     logger.info(f'Running final eval...')
