@@ -30,8 +30,8 @@ def main():
     args.render_video = True
     args.wandb = True
     args.eval_while_training = True
-    score = train_jax(args)
-    wandb.log({"mean_reward": score})
+    metrics = train_jax(args)
+    wandb.log({"mean_reward": metrics['eval_reward_mean']})
 
 
 sweep_configuration = {

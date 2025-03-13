@@ -50,7 +50,13 @@ def train_jax(args: argparse.Namespace):
         next_obs = next_obs[:, :1].reshape(args.num_envs, 1, -1)
 
         # add to buffer
-        exps = {'obs': obs[:, 0, :], 'actions': actions[:, 0], 'rewards': rewards[:, 0], 'next_obs': next_obs[:, 0, :], 'dones': dones[:, 0]}
+        exps = {
+                'obs': obs[:, 0, :],
+                'actions': actions[:, 0],
+                'rewards': rewards[:, 0],
+                'next_obs': next_obs[:, 0, :],
+                'dones': dones[:, 0],
+                }
         bstate = buffer.add_many(bstate, exps)
 
         # train step
@@ -119,7 +125,7 @@ def train_jax(args: argparse.Namespace):
     logger.info(f'Training env:')
     pprint.pprint(env_params)
     if args.epsilon_decay is None:
-        eps_decay = (1 - 0.5 * (1 - args.epsilon_end/args.epsilon_start))**(1/(args.epsilon_decay_half_life_fraction*args.num_steps))
+        eps_decay = (1 - 0.5 * (1 - args.epsilon_end/args.epsilon_start))**(1 / (args.epsilon_decay_half_life_fraction * args.num_steps))
     else:
         eps_decay = args.epsilon_decay
     ag_params = DQNAgentParams(
@@ -159,7 +165,6 @@ def train_jax(args: argparse.Namespace):
 
     # init buffer
     buffer = ReplayBuffer(buffer_size=args.memory_size, sample_batch_size=args.batch_size)
-    # obs_size = (1, 2 * args.window_radius + 1, 2 * args.window_radius + 1, 6)
     obs_size = ((2 * args.window_radius + 1) ** 2 * 6,)
 
     exp = {
@@ -200,7 +205,9 @@ def train_jax(args: argparse.Namespace):
     ag_state = carry[-3]
     rewards.block_until_ready()  # for accurate timing
     time_taken = timer() - ts
-    logger.info(f'Trained {args.num_steps:,} steps with {args.num_envs:,} envs in {time_taken:.2f}s ({(args.num_envs * args.num_steps)/time_taken:,.0f} obs/s)')
+    obs_per_sec = (args.num_envs * args.num_steps) / time_taken
+    metrics = {'obs_per_sec': obs_per_sec, 'time_taken': time_taken}
+    logger.info(f'Trained {args.num_steps:,} steps with {args.num_envs:,} envs in {time_taken:.2f}s ({obs_per_sec:,.0f} obs/s)')
 
     if args.save_final_checkpoint:
         jax_name = os.path.join(run_dir, f'agent_{args.num_steps}_steps_jax.safetensors')
@@ -213,6 +220,8 @@ def train_jax(args: argparse.Namespace):
     # evals
     logger.info(f'Running final eval...')
     agent_eval, random_eval  = eval_jax(args, ag_state)
+    metrics['eval_reward_mean'] = agent_eval[0]
+    metrics['eval_reward_std'] = agent_eval[1]
     logger.info(f'Final mean eval reward: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
     if args.wandb:
         wandb.log({'eval_reward': agent_eval[0], 'random_reward': random_eval[0]}, step=args.num_steps)
@@ -225,7 +234,7 @@ def train_jax(args: argparse.Namespace):
             logger.info(f'Logging video to W&B...')
             wandb.log({"eval_video": wandb.Video(f_out, format="mp4")}, step=args.num_steps)
 
-    return agent_eval[0]
+    return metrics
 
 def eval_jax(args: argparse.Namespace, ag_state):
     def _eval(carry, step):
@@ -264,7 +273,6 @@ def eval_jax(args: argparse.Namespace, ag_state):
     dqn_agent = DQNAgent()
     mean_rewards = []
     random_mean_rewards = []
-
 
     for i in trange(args.num_evals):
         rng = jax.random.PRNGKey(args.eval_seed + i)

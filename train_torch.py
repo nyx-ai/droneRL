@@ -1,17 +1,11 @@
 import logging
 import ast
-import copy
 import json
 from datetime import datetime
 import os
 import pprint
 import statistics
 import argparse
-import math
-import jax
-import jax.numpy as jnp
-import jax.lax
-import jax.random
 from tqdm import trange
 from timeit import default_timer as timer
 import wandb
@@ -22,7 +16,6 @@ from torch_impl.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFa
 from torch_impl.agents.random import RandomAgent
 from torch_impl.helpers.rl_helpers import set_seed
 from torch_impl.render_util import render_video
-
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)-5.5s] [%(name)-12.12s]: %(message)s')
@@ -135,7 +128,9 @@ def train_torch(args: argparse.Namespace):
                 wandb.log({'eval_reward': agent_eval[0], 'random_reward': random_eval[0]}, step=step)
 
     time_taken = timer() - ts
-    logger.info(f'Trained {args.num_steps:,} steps with {args.num_envs:,} envs in {time_taken:.2f}s ({(args.num_envs * args.num_steps)/time_taken:,.0f} obs/s)')
+    obs_per_sec = (args.num_envs * args.num_steps) / time_taken
+    metrics = {'obs_per_sec': obs_per_sec, 'time_taken': time_taken}
+    logger.info(f'Trained {args.num_steps:,} steps with {args.num_envs:,} envs in {time_taken:.2f}s ({obs_per_sec:,.0f} obs/s)')
     if args.save_final_checkpoint:
         f_name = os.path.join(run_dir, f'agent_{args.num_steps}_steps_jax.safetensors')
         logger.info(f'Saving torch checkpoint to {f_name}...')
@@ -144,6 +139,8 @@ def train_torch(args: argparse.Namespace):
     # final eval
     logger.info(f'Running final eval...')
     agent_eval, random_eval = eval_torch(args, agents)
+    metrics['eval_reward_mean'] = agent_eval[0]
+    metrics['eval_reward_std'] = agent_eval[1]
     logger.info(f'Final mean eval reward: {agent_eval[0]:.3f} ± {agent_eval[1]:.3f} (random agent: {random_eval[0]:.3f} ± {random_eval[1]:.3f})')
     if args.wandb:
         wandb.log({'eval_reward': agent_eval[0], 'random_reward': random_eval[0]}, step=args.num_steps)
@@ -157,7 +154,7 @@ def train_torch(args: argparse.Namespace):
             logger.info(f'Logging video to W&B...')
             wandb.log({"eval_video": wandb.Video(f_out, format="mp4")}, step=args.num_steps)
 
-    return agent_eval[0]
+    return metrics
 
 def eval_torch(args: argparse.Namespace, agents):
     grid_size = args.grid_size if args.eval_grid_size is None else args.eval_grid_size
