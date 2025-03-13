@@ -1,4 +1,5 @@
 # 🚁 DroneRL
+![Tests](https://github.com/nyx-ai/droneRL/actions/workflows/tests.yml/badge.svg)
 
 DroneRL is a reinforcement learning 2D grid world environment in which agents can be trained for optimal package delivery.
 
