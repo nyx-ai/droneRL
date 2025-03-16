@@ -49,7 +49,7 @@ class DenseQNetwork(nn.Module):
 
     @nn.compact
     def __call__(self, x):
-        # x = x.reshape(x.shape[0], -1)
+        x = x.reshape(x.shape[0], -1)
         for n_features in self.hidden_layers:
             x = nn.Dense(n_features, kernel_init=nn.initializers.he_normal())(x)
             x = nn.relu(x)
@@ -79,6 +79,7 @@ class ConvQNetwork(nn.Module):
                 padding=conv_kwds.get("padding", 0),
                 )(x)
             x = nn.relu(x)
+        x = x.transpose(0, 3, 1, 2)  #  for compatibility with PyTorch impl
         x = x.reshape(x.shape[0], -1)
         for n_features in self.dense_layers:
             x = nn.Dense(features=n_features)(x)
@@ -236,10 +237,15 @@ class DQNAgent():
             key = original_key.split('.')
             if key[0] == 'network':
                 key[0] = 'params'
-            if key[1].startswith(('dense', 'conv')):
+            if key[1].startswith('dense'):
                 new_key_name = key[1].capitalize()  # dense => Dense / conv => Conv
                 new_key_name, layer_idx = new_key_name.split('_')
                 new_key_name = new_key_name + '_' + str(int(layer_idx) - 1)
+                key[1] = new_key_name
+            elif key[1].startswith('conv'):
+                new_key_name = key[1].capitalize()  # dense => Dense / conv => Conv
+                new_key_name, layer_idx = new_key_name.split('_')
+                new_key_name = new_key_name.replace('2d', '') + '_' + str(int(layer_idx) - 1)
                 key[1] = new_key_name
             if key[-1] == 'weight':
                 if key[1].startswith('Dense'):
@@ -305,9 +311,11 @@ class DQNAgent():
             checkpoint_format_version: float = 0.1,
             ):
         window_size = env_params.window_radius * 2 + 1
+        # in PyTorch impl the "dense_layers" key is used differently dependending on Conv vs. Dense
+        dense_layers = str(ag_params.hidden_layers) if ag_params.network_type == 'dense' else str(ag_params.conv_dense_layers)
         metadata = {
             "network_type": ag_params.network_type,
-            "dense_layers": str(ag_params.hidden_layers),
+            "dense_layers": dense_layers,
             "conv_dense_layers": str(ag_params.conv_dense_layers),
             "conv_layers": str(ag_params.conv_layers),
             "obs_shape": str((window_size, window_size, 6)),
@@ -324,10 +332,15 @@ class DQNAgent():
             original_shape = v.shape
             if key[0] == 'params':
                 key[0] = 'network'
-            if key[1].startswith(('Dense', 'Conv')):
-                new_key_name = key[1].lower()  # Dense => dense / Conv => conv
+            if key[1].startswith('Dense'):
+                new_key_name = key[1].lower()  # Dense => dense
                 new_key_name, layer_idx = new_key_name.split('_')
                 new_key_name = new_key_name + '_' + str(int(layer_idx) + 1)
+                key[1] = new_key_name
+            elif key[1].startswith('Conv'):
+                new_key_name = key[1].lower()  # Conv => conv2d
+                new_key_name, layer_idx = new_key_name.split('_')
+                new_key_name = new_key_name + '2d' + '_' + str(int(layer_idx) + 1)
                 key[1] = new_key_name
             if key[-1] == 'kernel':
                 if key[1].startswith('dense'):

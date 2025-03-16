@@ -94,6 +94,7 @@ def test_dqn_conv_agent_act(dqn_agent, obs):
     out_after = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
     assert jnp.allclose(out_before, out_after)
 
+
 @pytest.mark.parametrize("conv_layers,conv_dense_layers", [
     (({'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1},), ()),
     (({'out_channels': 32, 'kernel_size': 1, 'stride': 1, 'padding': 1},), (16, 8)),
