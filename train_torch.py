@@ -12,7 +12,7 @@ import wandb
 
 from torch_impl.env.env import DeliveryDrones
 from torch_impl.env.wrappers import WindowedGridView
-from torch_impl.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory
+from torch_impl.agents.dqn import DQNAgent, DenseQNetworkFactory, ConvQNetworkFactory, BaseDQNFactory
 from torch_impl.agents.random import RandomAgent
 from torch_impl.helpers.rl_helpers import set_seed
 from torch_impl.render_util import render_video
@@ -48,23 +48,26 @@ def train_torch(args: argparse.Namespace):
 
     # agents
     agents = {drone.index: RandomAgent(env) for drone in env.drones_list}
-    if args.network_type == 'dense':
-        factory = DenseQNetworkFactory(
-            env.observation_space.shape,
-            (env.action_space.n,),
-            hidden_layers=args.hidden_layers,
-            learning_rate=args.learning_rate
-        )
-    elif args.network_type == 'conv':
-        factory = ConvQNetworkFactory(
-            env.observation_space.shape,
-            (env.action_space.n,),
-            conv_layers=args.conv_layers,
-            dense_layers=args.conv_dense_layers,
-            learning_rate=args.learning_rate
-        )
+    if args.load_from_checkpoint is None:
+        if args.network_type == 'dense':
+            factory = DenseQNetworkFactory(
+                env.observation_space.shape,
+                (env.action_space.n,),
+                hidden_layers=args.hidden_layers,
+                learning_rate=args.learning_rate
+            )
+        elif args.network_type == 'conv':
+            factory = ConvQNetworkFactory(
+                env.observation_space.shape,
+                (env.action_space.n,),
+                conv_layers=args.conv_layers,
+                dense_layers=args.conv_dense_layers,
+                learning_rate=args.learning_rate
+            )
+        else:
+            raise Exception(f'Unexpected network type {args.network_type}')
     else:
-        raise Exception(f'Unexpected network type {args.network_type}')
+        factory = BaseDQNFactory.from_checkpoint(args.load_from_checkpoint)
     if args.epsilon_decay is None:
         eps_decay = (1 - 0.5 * (1 - args.epsilon_end/args.epsilon_start))**(1/(args.epsilon_decay_half_life_fraction*args.num_steps))
     else:
@@ -245,6 +248,7 @@ def parse_args():
     parser.add_argument("--reset_env_every", type=int, default=100, help="Reset env every n training steps")
     parser.add_argument("--tau", type=float, default=1.0, help="Soft update parameter. A value of 1.0 corresponds to hard updates.")
     parser.add_argument("--save_final_checkpoint", action='store_true', default=False, help="Whether to save a final checkpoint")
+    parser.add_argument("--load_from_checkpoint", type=str, default=None, help="Provide to initialize model from existing checkpoint")
     # model
     parser.add_argument("--network_type", choices=['dense', 'conv'], default='dense', help="DQN network type")
     parser.add_argument("--hidden_layers", nargs='+', type=int, default=(16, 16), help="Dense network hidden layer sizes")
