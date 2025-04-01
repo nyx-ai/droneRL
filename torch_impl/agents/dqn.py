@@ -1,8 +1,9 @@
-from typing import Tuple, Dict, Sequence, Optional
+from typing import Dict, Sequence, Optional
 from collections import defaultdict, Counter
 from collections import deque
 
 import gym.spaces as spaces
+from gym import Env
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -219,7 +220,7 @@ class DenseQNetworkFactory(BaseDQNFactory):
                 obs_shape=obs_shape,
                 action_shape=action_shape,
                 hidden_layers=hidden_layers,
-                state_dict=state_dict
+                state_dict=state_dict,
             )
 
 
@@ -234,12 +235,14 @@ class ConvQNetworkFactory(BaseDQNFactory):
             action_shape: Sequence[int],
             conv_layers: Sequence[Dict[str, int]] = (),
             dense_layers: Sequence[int] = (),
+            learning_rate: float = 1e-3,
             state_dict: Optional[Dict] = None):
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.conv_layers = conv_layers
         self.dense_layers = dense_layers
         self.state_dict = state_dict
+        self.learning_rate = learning_rate
 
         # Validate conv layers have required parameters
         for layer in self.conv_layers:
@@ -250,7 +253,7 @@ class ConvQNetworkFactory(BaseDQNFactory):
 
     def create_qnetwork(self):
         network = ConvQNetwork(self.obs_shape, self.action_shape, self.conv_layers, self.dense_layers)
-        optimizer = optim.Adam(network.parameters())
+        optimizer = optim.Adam(network.parameters(), lr=self.learning_rate)
         if self.state_dict is not None:
             network.load_state_dict(self.state_dict)
         return network, optimizer
@@ -280,8 +283,19 @@ class DQNAgent():
     and a target network.
     """
 
-    def __init__(self, env, dqn_factory, gamma, epsilon_start, epsilon_decay, epsilon_end, memory_size, batch_size,
-                 target_update_interval, logger: Optional[Logger] = None):
+    def __init__(
+            self,
+            env: Env,
+            dqn_factory: BaseDQNFactory,
+            gamma: float,
+            epsilon_start: float,
+            epsilon_decay: float,
+            epsilon_end: float,
+            memory_size: int,
+            batch_size: int,
+            target_update_interval: int,
+            epsilon_decay_every: Optional[int] = None,
+            logger: Optional[Logger] = None):
         # Save parameters
         self.env = env
         self.dqn_factory = dqn_factory  # Factory to create q-networks + optimizers
@@ -289,6 +303,7 @@ class DQNAgent():
         self.epsilon_start = epsilon_start  # Exploration rate
         self.epsilon_decay = epsilon_decay  # Decay after each episode
         self.epsilon_end = epsilon_end  # Minimum value
+        self.epsilon_decay_every = epsilon_decay_every  # by default we decay epsilon at the end of an episode
         self.memory_size = memory_size  # Size of the replay buffer
         self.batch_size = batch_size  # Batch size
         self.target_update_interval = target_update_interval  # Update rate
@@ -358,12 +373,12 @@ class DQNAgent():
                 'memory_size': len(self.memory),
             })
             self.epsilons.append(self.epsilon)  # Log epsilon value
-
-            # Epsilon decay
-            self.epsilon = max(
-                self.epsilon * self.epsilon_decay, self.epsilon_end)
-
             self.episode_reward = 0
+
+        # Epsilon decay
+        if (self.epsilon_decay_every is None and done) or (
+                self.epsilon_decay_every is not None and self.total_steps % self.epsilon_decay_every == 0):
+            self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_end)
 
         # Periodically update target network with current one
         if self.total_steps % self.target_update_interval == 0:

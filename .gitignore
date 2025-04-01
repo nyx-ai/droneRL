@@ -4,3 +4,7 @@ venv
 .DS_Store
 __pycache__
 wandb
+*.npy
+*.png
+output
+jax_cache

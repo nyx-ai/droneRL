@@ -50,9 +50,6 @@ class DeliveryDrones:
             p_choice &= ~exclude_mask
         p_choice = p_choice.ravel()
 
-        # old method
-        # pos = jax.random.choice(key, params.grid_size ** 2, shape=fill_values.shape, p=p_choice, replace=False)
-
         # new method
         noise = jax.random.uniform(key, shape=(params.grid_size ** 2,))
         scores = jnp.log(p_choice) + noise
@@ -76,14 +73,11 @@ class DeliveryDrones:
         if exclude is not None:
             p_choice &= ~exclude
         p_choice = p_choice.ravel()
-        # pos = jax.random.choice(key, params.grid_size ** 2, shape=(params.n_drones,), p=p_choice, replace=False)
 
         # new method
-        # noise = jax.random.gumbel(key, shape=(params.grid_size ** 2,))
         noise = jax.random.uniform(key, shape=(params.grid_size ** 2,))
         scores = jnp.log(p_choice) + noise
-        # _, pos = jax.lax.top_k(scores, k=params.n_drones)
-        _, pos = jax.lax.approx_max_k(scores, params.n_drones)
+        _, pos = jax.lax.top_k(scores, k=params.n_drones)
 
         random_x_pos = pos // params.grid_size
         random_y_pos = pos % params.grid_size
@@ -173,7 +167,7 @@ class DeliveryDrones:
         collided = off_board | collided_skyscrapers | collisions
 
         # handle charge
-        is_charging = (state.ground[new_y, new_x] == Object.STATION) & (~collided) & (state.charge < 100)
+        is_charging = (state.ground[new_y, new_x] == Object.STATION) & (~collided)
         is_discharging = ~is_charging & (~collided)
         charge = (state.charge + is_charging * params.charge).clip(0, 100)
         charge = (charge - is_discharging * params.discharge).clip(0, 100)
@@ -284,36 +278,65 @@ class DeliveryDrones:
         radius = params.window_radius
         padded = jnp.pad(env_state.ground, radius, mode='constant', constant_values=Object.SKYSCRAPER)  # pad with skyscrapers
         x_pos, y_pos = env_state.air_x + radius, env_state.air_y + radius
-        padded = padded.at[y_pos, x_pos].add(100)  # required to get drone positions
+
+        padded_charge = jnp.zeros_like(padded, dtype=jnp.int8)
+        padded_charge = padded_charge.at[y_pos, x_pos].set(env_state.charge.astype(jnp.int8) + 1)  # +1 in order to represent zero charge
+
         x_indices = x_pos[:, None] + jnp.arange(-radius, radius + 1, dtype=jnp.int32)[None, :]  # (n, 1) + (1, 2r+1) => (n, 2r+1)
         y_indices = y_pos[:, None] + jnp.arange(-radius, radius + 1, dtype=jnp.int32)[None, :]
-        obs_org = padded[y_indices[:, :, None], x_indices[:, None, :]]  # => (n, 2r+1, 2r+1)
+        obs_ground = padded[y_indices[:, :, None], x_indices[:, None, :]]  # => (n, 2r+1, 2r+1)
+        obs_charge = padded_charge[y_indices[:, :, None], x_indices[:, None, :]]
 
         # re-map some of the classes for one-hot encoding
         # currently: skyscraper: 2, station: 3, dropzone: 4, packages: 5
         # new: drone pos: 0, packages: 1, dropzones: 2, station: 3, charge: 4, skyscrapers/wall: 5
-        obj_only = obs_org % 100
-        obj_only = jnp.where(obj_only == Object.PACKET, 1,   # packages -> 1
-                  jnp.where(obj_only == Object.SKYSCRAPER, 5,   # skyscrapers -> 5
-                  jnp.where(obj_only == Object.DROPZONE, 2,   # dropzones -> 2
-                  jnp.where(obj_only == 0, 10,   # empty -> arbitrary value > 6
-                           obj_only))))  # default case
+        obs_ground = jnp.where(obs_ground == Object.PACKET, 1,   # packages -> 1
+                  jnp.where(obs_ground == Object.SKYSCRAPER, 5,   # skyscrapers -> 5
+                  jnp.where(obs_ground == Object.DROPZONE, 2,   # dropzones -> 2
+                  jnp.where(obs_ground == 0, 10,   # empty -> arbitrary value > 6
+                           obs_ground))))  # default case
 
         # generate one-hot encoding
-        obs = jax.nn.one_hot(obj_only, 6, dtype=jnp.bool)
-        obs = obs.at[:, :, :, 0].set(obs_org >= 100)
+        obs = jax.nn.one_hot(obs_ground, 6, dtype=jnp.bool)
+        obs = obs.at[:, :, :, 0].set(obs_charge > 0)
 
         # mark package if carrying
         obs = obs.at[:, radius, radius, 1].set(obs[:, radius, radius, 1] | env_state.carrying_package)
 
         # mark charge status
-        obs = obs.astype(jnp.float32)
-        obs = obs.at[:, radius, radius, 4].set(env_state.charge / 100.0)
+        obs =  obs.astype(jnp.float32)
+        obs = obs.at[:, :, :, 4].set((obs_charge - 1).clip(0, 100) / 100.0)
         return obs
 
-    def format_action(self, *actions):
+    def format_action(self, actions: jnp.ndarray):
         return [['←', '↓', '→', '↑', 'X'][i] for i in actions]
 
+    def print_board(self, env_state: DroneEnvState):
+        board = jax.device_get(env_state.ground).copy()
+        for i, (x, y) in enumerate(zip(env_state.air_x, env_state.air_y)):
+            board[y, x] = 100 + i  # Use high values for drones
+        board_str = ""
+        EMOJI_MAP = {
+                0: "⬜",  # Empty ground
+                Object.SKYSCRAPER: "🏢",
+                Object.STATION: "🔌",
+                Object.DROPZONE: "📍",
+                Object.PACKET: "📦",
+                }
+        for y in range(board.shape[0]):
+            for x in range(board.shape[1]):
+                value = board[y, x]
+                if value >= 100:
+                    drone_index = value - 100
+                    if env_state.carrying_package[drone_index]:
+                        drone_emoji = f'📦{drone_index}'
+                    else:
+                        drone_emoji = f'P{drone_index}'
+                    board_str += drone_emoji + " "
+                else:
+                    board_str += EMOJI_MAP.get(value, "❓") + " "
+            board_str += "\n"
+        print(board_str)
 
 # if __name__ == "__main__":
 #     from jax.experimental.compilation_cache import compilation_cache as cc

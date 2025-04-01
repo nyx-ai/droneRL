@@ -1,4 +1,5 @@
 from typing import Dict
+import jax.tree_util
 import jax.numpy as jnp
 import jax.random
 
@@ -87,7 +88,6 @@ class ReplayBuffer:
                 state.experiences,
                 )
         return batch
-
 
     def can_sample(self, state: BufferState):
         return state.current_size >= self.sample_batch_size

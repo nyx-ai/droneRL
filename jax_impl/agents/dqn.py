@@ -1,4 +1,5 @@
-from typing import Tuple, Dict, Union, Literal
+from typing import Tuple, Dict, Union, Optional, Literal
+import copy
 import ast
 import jax
 import jax.random
@@ -19,13 +20,17 @@ from common.constants import Action
 @dataclass
 class DQNAgentParams:
     hidden_layers: Tuple[int, ...] = (32, 32)
+    network_type: Literal['dense', 'conv'] = 'dense'
+    conv_layers: Tuple[Dict[str, int], ...] = ({'out_channels': 8, 'kernel_size': 3, 'stride': 1, 'padding': 1},)
+    conv_dense_layers: Tuple[int, ...] = ()
     gamma: float = 0.95
     epsilon_start: float = 1.0
     epsilon_decay: float = 0.999
     epsilon_end: float = 0.01
+    epsilon_decay_every: Optional[int] = None  # decay epsilon after every n steps of training. By default decay at episode end
     learning_rate: float = 1e-3
-    target_update_interval: int = 5       # interval for updating target network
-    tau: float = 1.0                      # EMA decay rate / smoothing coef for target network
+    target_update_interval: int = 5            # interval for updating target network
+    tau: float = 1.0                           # EMA decay rate / smoothing coef for target network
 
 
 @dataclass
@@ -44,29 +49,76 @@ class DenseQNetwork(nn.Module):
 
     @nn.compact
     def __call__(self, x):
+        x = x.reshape(x.shape[0], -1)
         for n_features in self.hidden_layers:
-            x = nn.Dense(n_features)(x)
+            x = nn.Dense(n_features, kernel_init=nn.initializers.he_normal())(x)
             x = nn.relu(x)
         x = nn.Dense(Action.num_actions())(x)
         return x
+
+    def init_weights(
+            self,
+            rng: jnp.ndarray,
+            input_shape: Tuple[int, int]):
+        return self.init({'params': rng}, jnp.zeros(input_shape, dtype=jnp.float32))
+
+
+class ConvQNetwork(nn.Module):
+    obs_shape: Tuple[int, ...]
+    conv_layers: Tuple[Dict[str, int], ...] = ({"out_channels": 8, "kernel_size": 3, "stride": 1, "padding": 1},)
+    dense_layers: Tuple[int, ...] = ()
+
+    @nn.compact
+    def __call__(self, x):
+        x = x.reshape(x.shape[0], *self.obs_shape)
+        for conv_kwds in self.conv_layers:
+            x = nn.Conv(
+                features=conv_kwds["out_channels"],
+                kernel_size=(conv_kwds["kernel_size"], conv_kwds["kernel_size"]),
+                strides=(conv_kwds.get("stride", 1), conv_kwds.get("stride", 1)),
+                padding=conv_kwds.get("padding", 0),
+                )(x)
+            x = nn.relu(x)
+        x = x.transpose(0, 3, 1, 2)  #  for compatibility with PyTorch impl
+        x = x.reshape(x.shape[0], -1)
+        for n_features in self.dense_layers:
+            x = nn.Dense(features=n_features)(x)
+            x = nn.relu(x)
+        x = nn.Dense(Action.num_actions())(x)
+        return x
+
+    def init_weights(
+            self,
+            rng: jnp.ndarray,
+            input_shape: Tuple[int, int]):
+        return self.init({'params': rng}, jnp.zeros(input_shape, dtype=jnp.float32))
 
 
 class DQNAgent():
     def reset(self, rng: jnp.ndarray, ag_params: DQNAgentParams, env_params: DroneEnvParams) -> DQNAgentState:
         if env_params.wrapper != 'window':
             raise NotImplementedError
-        r = env_params.window_radius
-        input_size = (r * 2 + 1) ** 2 * 6
         # create network
-        qnetwork = DenseQNetwork(ag_params.hidden_layers)
-        qnetwork_params = qnetwork.init({'params': rng}, jnp.zeros((1, input_size)))
+        r = env_params.window_radius
+        obs_shape = (r * 2 + 1, r * 2 + 1, 6)
+        if ag_params.network_type == 'dense':
+            qnetwork = DenseQNetwork(ag_params.hidden_layers)
+        elif ag_params.network_type == 'conv':
+            qnetwork = ConvQNetwork(
+                    obs_shape=obs_shape,
+                    conv_layers=ag_params.conv_layers,
+                    dense_layers=ag_params.conv_dense_layers)
+        else:
+            raise ValueError(f'Unsupported network type {ag_params.network_type}')
+        input_shape = (1, (env_params.window_radius * 2 + 1) ** 2 * 6)
+        qnetwork_params = qnetwork.init_weights(rng, input_shape)
         # create optimizer
         optimizer = optax.adam(ag_params.learning_rate)
         opt_state = optimizer.init(qnetwork_params)
         # create target network (static)
         rng, key = jax.random.split(rng)
-        target_qnetwork = DenseQNetwork(ag_params.hidden_layers)
-        target_qnetwork_params = qnetwork.init({'params': key}, jnp.zeros((1, input_size)))
+        target_qnetwork = copy.deepcopy(qnetwork)
+        target_qnetwork_params = target_qnetwork.init_weights(key, input_shape)
         return DQNAgentState(
                 qnetwork=qnetwork,
                 qnetwork_params=qnetwork_params,
@@ -101,7 +153,9 @@ class DQNAgent():
         def compute_loss(network_params):
             # Q-values for current state (network)
             q_values = ag_state.qnetwork.apply(network_params, batch['obs'])
-            q_value = jnp.take(q_values, batch['actions'])
+            # q_values are (BS, 5), actions are (BS,) - we need (BS, 1) for take_along_axis to work
+            q_value = jnp.take_along_axis(q_values, jnp.expand_dims(batch['actions'], axis=1), axis=1)
+            q_value = jnp.squeeze(q_value)
 
             # Q-values for next state (target network)
             next_q_values = ag_state.target_qnetwork.apply(
@@ -135,6 +189,12 @@ class DQNAgent():
             ag_params.tau)
         return ag_state.replace(target_qnetwork_params=target_params)
 
+    def should_update_epsilon(self, ag_params: DQNAgentParams, step: jnp.ndarray, done: jnp.ndarray):
+        if ag_params.epsilon_decay_every is None:
+            return done
+        else:
+            return step % ag_params.epsilon_decay_every == 0
+
     def update_epsilon(self, ag_state: DQNAgentState, ag_params: DQNAgentParams):
         epsilon = jnp.maximum(ag_state.epsilon * ag_params.epsilon_decay, ag_params.epsilon_end)
         return ag_state.replace(epsilon=epsilon)
@@ -145,10 +205,22 @@ class DQNAgent():
             raise Exception(f'The checkpoint under {path} is not compatible with JAX')
         params = load_file(path)
         params = unflatten_dict(params, sep='.')
-        hidden_layers = ast.literal_eval(metadata['dense_layers'])
-        qnetwork = DenseQNetwork(hidden_layers)
+        if metadata['network_type'] == 'dense':
+            hidden_layers = ast.literal_eval(metadata['dense_layers'])
+            qnetwork = DenseQNetwork(hidden_layers)
+        elif metadata['network_type'] == 'conv':
+            conv_layers = ast.literal_eval(metadata['conv_layers'])
+            conv_dense_layers = ast.literal_eval(metadata['conv_dense_layers'])
+            obs_shape = ast.literal_eval(metadata['obs_shape'])
+            qnetwork = ConvQNetwork(
+                    obs_shape=obs_shape,
+                    conv_layers=conv_layers,
+                    dense_layers=conv_dense_layers)
+        else:
+            raise ValueError(f'Unexpected network type {metadata["network_type"]}')
         ag_state = ag_state.replace(
                 qnetwork=qnetwork,
+                target_qnetwork=copy.deepcopy(qnetwork),
                 qnetwork_params=params,
                 target_qnetwork_params=params)
         return ag_state
@@ -157,7 +229,7 @@ class DQNAgent():
         metadata = safe_open(path, 'np').metadata()
         if metadata.get('checkpoint_format', 'torch') != 'torch':
             raise Exception(f'The checkpoint under {path} is not a PyTorch checkpoint')
-        if metadata.get('network_type', 'dense') not in ['dense']:
+        if metadata.get('network_type', 'dense') not in ['dense', 'conv']:
             raise Exception(f'The checkpoint under {path} is of network type {metadata.get("network_type")} which is currently not supported.')
         params = load_file(path)
         new_params = {}
@@ -166,21 +238,43 @@ class DQNAgent():
             if key[0] == 'network':
                 key[0] = 'params'
             if key[1].startswith('dense'):
-                new_key_name = key[1].capitalize()  # dense => Dense
+                new_key_name = key[1].capitalize()  # dense => Dense / conv => Conv
                 new_key_name, layer_idx = new_key_name.split('_')
                 new_key_name = new_key_name + '_' + str(int(layer_idx) - 1)
                 key[1] = new_key_name
+            elif key[1].startswith('conv'):
+                new_key_name = key[1].capitalize()  # dense => Dense / conv => Conv
+                new_key_name, layer_idx = new_key_name.split('_')
+                new_key_name = new_key_name.replace('2d', '') + '_' + str(int(layer_idx) - 1)
+                key[1] = new_key_name
             if key[-1] == 'weight':
-                v = v.T
+                if key[1].startswith('Dense'):
+                    v = v.T
+                elif key[1].startswith('Conv'):
+                    v = v.transpose((2, 3, 1, 0))
+                else:
+                    raise Exception(f'Unexpected key {key}')
                 key[-1] = 'kernel'
             new_key = '.'.join(key)
             new_params[new_key] = v
         params = new_params
         params = unflatten_dict(params, sep='.')
-        hidden_layers = ast.literal_eval(metadata.get('dense_layers'))
-        qnetwork = DenseQNetwork(hidden_layers)
+        if metadata['network_type'] == 'dense':
+            hidden_layers = ast.literal_eval(metadata['dense_layers'])
+            qnetwork = DenseQNetwork(hidden_layers)
+        elif metadata['network_type'] == 'conv':
+            conv_layers = ast.literal_eval(metadata['conv_layers'])
+            conv_dense_layers = ast.literal_eval(metadata['conv_dense_layers'])
+            obs_shape = ast.literal_eval(metadata['obs_shape'])
+            qnetwork = ConvQNetwork(
+                    obs_shape=obs_shape,
+                    conv_layers=conv_layers,
+                    dense_layers=conv_dense_layers)
+        else:
+            raise ValueError(f'Unexpected network type {metadata["network_type"]}')
         ag_state = ag_state.replace(
                 qnetwork=qnetwork,
+                target_qnetwork=copy.deepcopy(qnetwork),
                 qnetwork_params=params,
                 target_qnetwork_params=params)
         return ag_state
@@ -195,8 +289,10 @@ class DQNAgent():
             ):
         window_size = env_params.window_radius * 2 + 1
         metadata = {
-            "network_type": "dense",
+            "network_type": ag_params.network_type,
             "dense_layers": str(ag_params.hidden_layers),
+            "conv_layers": str(ag_params.conv_layers),
+            "conv_dense_layers": str(ag_params.conv_dense_layers),
             "obs_shape": str((window_size, window_size, 6)),
             "action_shape": str((Action.num_actions(),)),
             "checkpoint_format": 'jax',
@@ -215,9 +311,13 @@ class DQNAgent():
             checkpoint_format_version: float = 0.1,
             ):
         window_size = env_params.window_radius * 2 + 1
+        # in PyTorch impl the "dense_layers" key is used differently dependending on Conv vs. Dense
+        dense_layers = str(ag_params.hidden_layers) if ag_params.network_type == 'dense' else str(ag_params.conv_dense_layers)
         metadata = {
-            "network_type": "dense",
-            "dense_layers": str(ag_params.hidden_layers),
+            "network_type": ag_params.network_type,
+            "dense_layers": dense_layers,
+            "conv_dense_layers": str(ag_params.conv_dense_layers),
+            "conv_layers": str(ag_params.conv_layers),
             "obs_shape": str((window_size, window_size, 6)),
             "action_shape": str((Action.num_actions(),)),
             "checkpoint_format": 'torch',
@@ -229,6 +329,7 @@ class DQNAgent():
         new_params = {}
         for original_key, v in params.items():
             key = original_key.split('.')
+            original_shape = v.shape
             if key[0] == 'params':
                 key[0] = 'network'
             if key[1].startswith('Dense'):
@@ -236,10 +337,21 @@ class DQNAgent():
                 new_key_name, layer_idx = new_key_name.split('_')
                 new_key_name = new_key_name + '_' + str(int(layer_idx) + 1)
                 key[1] = new_key_name
+            elif key[1].startswith('Conv'):
+                new_key_name = key[1].lower()  # Conv => conv2d
+                new_key_name, layer_idx = new_key_name.split('_')
+                new_key_name = new_key_name + '2d' + '_' + str(int(layer_idx) + 1)
+                key[1] = new_key_name
             if key[-1] == 'kernel':
-                v = v.T
+                if key[1].startswith('dense'):
+                    v = v.T
+                elif key[1].startswith('conv'):
+                    v = jnp.transpose(v, (3, 2, 0, 1))
+                else:
+                    raise Exception(f'Unexpected key {key}')
                 key[-1] = 'weight'
             new_key = '.'.join(key)
+            # print(f'Saving {original_key} => {new_key} (shape: {v.shape}, original shape: {original_shape})')
             new_params[new_key] = v
         params = new_params
         save_file(params, save_path, metadata=metadata)

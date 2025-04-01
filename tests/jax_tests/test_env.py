@@ -262,7 +262,57 @@ def test_get_obs_v2(drone_env_get_obs):
     assert obs[1, radius, radius, 1] == 0  # not carrying package
     assert obs[1, 2, 6, 1] == 1
     assert obs[1, 6, 6, 1] == 1
-    assert obs[0, radius, radius, 4] == .8  # charge
-    assert obs[1, radius, radius, 4] == .6
+    assert jnp.allclose(obs[0, radius, radius, 4], jnp.array(.8))  # charge
+    assert jnp.allclose(obs[1, radius, radius, 4], jnp.array(.6))
     assert obs[0, 0, 2, 5] == 1  # skyscraper
     assert jnp.all(obs[0, :, :2, 5] == 1)  # walls
+
+
+def test_get_obs_comprehensive(drone_env_get_obs):
+    state, params = drone_env_get_obs
+    env = DeliveryDrones()
+    radius = params.window_radius
+    obs = env.get_obs(state, params)
+
+    # Test dimensions and types
+    assert obs.shape == (params.n_drones, 2*radius + 1, 2*radius + 1, 6)
+    assert obs.dtype == jnp.float32
+
+    # Test drone positions (channel 0)
+    assert obs[0, radius, radius, 0] == 1  # First drone at center
+    assert jnp.sum(obs[0, :, :, 0]) == params.n_drones  # Total number of drones
+
+    # Test packet visibility (channel 1)
+    n_packets = jnp.sum(obs[:, :, :, 1])
+    assert n_packets > 0  # Should see at least some packets
+    assert obs[0, radius, radius, 1] == 1  # First drone carrying packet
+    assert obs[1, radius, radius, 1] == 0  # Second drone not carrying
+
+    # Test dropzones (channel 2)
+    n_dropzones = jnp.sum(obs[:, :, :, 2])
+    assert n_dropzones > 0  # Should see at least one dropzone
+
+    # Test charging stations (channel 3)
+    n_stations = jnp.sum(obs[:, :, :, 3])
+    assert n_stations > 0  # Should see at least one station
+
+    # Test charge levels (channel 4)
+    assert 0 <= obs[0, radius, radius, 4] <= 1  # Normalized charge
+    assert 0 <= obs[1, radius, radius, 4] <= 1
+    assert jnp.allclose(obs[0, radius, radius, 4], jnp.array(0.8))  # First drone charge
+    assert jnp.allclose(obs[1, radius, radius, 4], jnp.array(0.6))  # Second drone charge
+
+    # Test channel exclusivity (each cell should have at most one object type)
+    # Excluding charge channel and drone positions
+    object_channels = obs[:, :, :, 1:4]  # packets, dropzones, stations
+    overlapping_objects = jnp.sum(object_channels, axis=-1)
+    assert jnp.all(overlapping_objects <= 1)  # No cell should have multiple objects
+
+    # Test visibility constraints
+    for drone_idx in range(params.n_drones):
+        # Center should always be visible (not a wall)
+        assert obs[drone_idx, radius, radius, 5] == 0
+        # Charge should only be present at drone position
+        num_charge_pos = jnp.sum(obs[drone_idx, :, :, 4] > 0)
+        assert num_charge_pos == params.n_drones
+        assert obs[drone_idx, radius, radius, 4] > 0

@@ -5,3 +5,4 @@ flax==0.10.2
 safetensors==0.5.2
 pytest==8.3.4
 pillow==11.1.0
+wandb==0.19.6

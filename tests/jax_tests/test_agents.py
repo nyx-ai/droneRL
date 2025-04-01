@@ -25,8 +25,8 @@ def obs():
     env = DeliveryDrones()
     rng = jax.random.PRNGKey(0)
     env_state = env.reset(rng, params)
-    obs = env.get_obs(env_state, params)[0]
-    return obs.ravel()
+    obs = env.get_obs(env_state, params)[0].reshape(1, -1)
+    return obs
 
 
 def test_dqn_agent_act(dqn_agent, obs):
@@ -38,7 +38,6 @@ def test_dqn_agent_act(dqn_agent, obs):
     assert action.shape == ()
     assert action.dtype == jnp.int32
 
-# @pytest.mark.focus
 def test_dqn_agent_save(dqn_agent, obs):
     env_params = DroneEnvParams()
     ag_params = DQNAgentParams()
@@ -56,10 +55,55 @@ def test_dqn_agent_save(dqn_agent, obs):
     out_after = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
     assert jnp.allclose(out_before, out_after)
 
-# @pytest.mark.focus
-def test_dqn_agent_torch_save(dqn_agent, obs):
+@pytest.mark.parametrize("hidden_layers", [
+    (),
+    (16, 64),
+    ((8, 8, 8)),
+])
+def test_dqn_dense_agent_torch_save(hidden_layers, dqn_agent, obs):
     env_params = DroneEnvParams()
-    ag_params = DQNAgentParams()
+    ag_params = DQNAgentParams(network_type='dense', hidden_layers=hidden_layers)
+    rng = jax.random.PRNGKey(1)
+    ag_state = dqn_agent.reset(rng, ag_params, env_params)
+    out_before = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
+    with tempfile.NamedTemporaryFile(mode="w", delete=True) as tf:
+        # saving
+        dqn_agent.save_as_torch(tf.file.name, ag_state, ag_params, env_params)
+        # loading again
+        ag_state = dqn_agent.load_from_torch(tf.file.name, ag_state)
+        # assert exception
+        with pytest.raises(Exception):
+            ag_state = dqn_agent.load(tf.file.name, ag_state)
+    out_after = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
+    assert jnp.allclose(out_before, out_after)
+
+def test_dqn_conv_agent_act(dqn_agent, obs):
+    env_params = DroneEnvParams()
+    ag_params = DQNAgentParams(network_type='conv')
+    rng = jax.random.PRNGKey(0)
+    ag_state = dqn_agent.reset(rng, ag_params, env_params)
+    out_before = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
+    with tempfile.NamedTemporaryFile(mode="w", delete=True) as tf:
+        # saving
+        dqn_agent.save(tf.file.name, ag_state, ag_params, env_params)
+        # loading again
+        ag_state = dqn_agent.load(tf.file.name, ag_state)
+        # assert exception
+        with pytest.raises(Exception):
+            ag_state = dqn_agent.load_from_torch(tf.file.name, ag_state)
+    out_after = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)
+    assert jnp.allclose(out_before, out_after)
+
+
+@pytest.mark.parametrize("conv_layers,conv_dense_layers", [
+    (({'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1},), ()),
+    (({'out_channels': 32, 'kernel_size': 1, 'stride': 1, 'padding': 1},), (16, 8)),
+    (({'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}, {'out_channels': 32, 'kernel_size': 3, 'stride': 1, 'padding': 1}), (16, 8)),
+    ((), (8, 8, 8)),
+])
+def test_dqn_agent_conv_torch_save(conv_layers, conv_dense_layers, dqn_agent, obs):
+    env_params = DroneEnvParams()
+    ag_params = DQNAgentParams(network_type='conv', conv_layers=conv_layers, conv_dense_layers=conv_dense_layers)
     rng = jax.random.PRNGKey(1)
     ag_state = dqn_agent.reset(rng, ag_params, env_params)
     out_before = ag_state.qnetwork.apply(ag_state.qnetwork_params, obs)

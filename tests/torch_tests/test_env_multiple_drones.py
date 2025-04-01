@@ -74,25 +74,25 @@ for _step in (range(len(actions))):
 
     if _step == 0:
         assert all(c == 90 for c in charge), "All drones should start with 90 charge after first step"
-        assert carrying_package == [0, 0, 1, 1, 1, 0, 0, 0], "Initial package state incorrect"
-        
+        assert list(carrying_package) == [0, 0, 1, 1, 1, 0, 0, 0], "Initial package state incorrect"
+
     if _step == 1:
-        assert charge == [80, 80, 80, 80, 80, 80, 80, 80], "Incorrect charge values at step 1"
-        assert carrying_package == [1, 0, 1, 1, 1, 0, 0, 0], "Drone 0 should pick up package"
-        
+        assert list(charge) == [80, 80, 80, 80, 80, 80, 80, 80], "Incorrect charge values at step 1"
+        assert list(carrying_package) == [1, 0, 1, 1, 1, 0, 0, 0], "Drone 0 should pick up package"
+
     if _step == 2:
-        assert charge == [100, 70, 70, 70, 70, 70, 70, 70], "Incorrect charge values at step 2"
-        assert carrying_package == [1, 0, 1, 1, 1, 0, 0, 1], "Drone 7 should pick up package"
-        
+        assert list(charge) == [100, 70, 70, 70, 70, 70, 70, 70], "Incorrect charge values at step 2"
+        assert list(carrying_package) == [1, 0, 1, 1, 1, 0, 0, 1], "Drone 7 should pick up package"
+
     if _step == 3:
-        assert charge == [90, 60, 100, 60, 60, 60, 100, 60], "Incorrect charge values at step 3"
-        assert carrying_package == [0, 0, 0, 1, 1, 0, 0, 1], "Drone 0 should deliver, D2&D6 crash"
+        assert list(charge) == [90, 60, 100, 60, 60, 60, 100, 60], "Incorrect charge values at step 3"
+        assert list(carrying_package) == [0, 0, 0, 1, 1, 0, 0, 1], "Drone 0 should deliver, D2&D6 crash"
         assert rewards[0] == 1, "Drone 0 should get delivery reward"
         assert rewards[2] == rewards[6] == -1, "Drones 2 and 6 should get crash penalty"
-        
+
     if _step == 7:
-        assert charge == [50, 20, 60, 20, 20, 100, 60, 100], "Incorrect charge values at step 7"
-        assert carrying_package == [0, 0, 0, 1, 1, 0, 0, 0], "D7&D5 crash, D7 loses package"
+        assert list(charge) == [50, 20, 60, 20, 20, 100, 60, 100], "Incorrect charge values at step 7"
+        assert list(carrying_package) == [0, 0, 0, 1, 1, 0, 0, 0], "D7&D5 crash, D7 loses package"
         assert rewards[5] == rewards[7] == -1, "Drones 5 and 7 should get crash penalty"
 
     # Render

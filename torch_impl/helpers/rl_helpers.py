@@ -71,7 +71,7 @@ def test_agents(env, agents, n_steps, seed=None):
     # Initialization
     if seed is not None:
         set_seed(env, seed=seed)
-    states, info = env.reset()
+    states = env.reset()
     rewards_log = defaultdict(list)
 
     # Set greedy flag
